@@ -1,0 +1,34 @@
+# ── Modelo padrão ──────────────────────────────────────────────
+# O provider será definido pela env var HERMES_PROVIDER (padrão: openrouter)
+# O modelo será definido pela env var HERMES_MODEL (padrão: deepseek/deepseek-chat)
+model:
+  default: deepseek/deepseek-chat
+  provider: openrouter
+
+# ── Gateway ────────────────────────────────────────────────────
+gateway:
+  media_delivery_allow_dirs: []
+  trust_recent_files: true
+  trust_recent_files_seconds: 600
+
+# ── Segurança ──────────────────────────────────────────────────
+security:
+  redact_secrets: true
+  tirith_enabled: true
+
+# ── Sessões ────────────────────────────────────────────────────
+sessions:
+  auto_prune: true
+  retention_days: 30
+
+# ── Exibição ───────────────────────────────────────────────────
+display:
+  language: pt
+  show_cost: false
+
+# ── Ferramentas disponíveis na API ─────────────────────────────
+# A API server não tem acesso a terminal/arquivos locais,
+# apenas ao LLM puro para chat completion.
+platform_toolsets:
+  api_server:
+    - web
