@@ -30,18 +30,19 @@ fi
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
 # ── Canais de delivery ─────────────────────────────────────────
-# Telegram usa long polling direto (token no ambiente do Space)
-# Precisa do extra hermes-agent[messaging] para python-telegram-bot
-TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+# Telegram poller independente (roda no mesmo Space)
+# WhatsApp relay via bridge para gateway local
+TELEGRAM_BOT_TOKEN="${TE..."
 
 # WhatsApp sempre como relay (precisa de conexão persistente)
 BRIDGE_RELAY_URL="${BRIDGE_RELAY_URL:-}"
 BRIDGE_API_KEY="${BRIDGE_API_KEY:-}"
 
 if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "[telegram] Modo direto com long polling no Space"
-    # Garante que python-telegram-bot está instalado (extra messaging)
-    pip3 install -q "python-telegram-bot[webhooks]==22.6" --no-cache-dir 2>&1 || echo "[telegram] Aviso: falha ao instalar python-telegram-bot"
+    echo "[telegram] Poller independente rodando no Space"
+    # Inicia o poller em background (independe do gateway)
+    nohup python3 /app/telegram_poller.py >> /tmp/telegram-poller.log 2>&1 &
+    echo "[telegram] PID: $!"
 fi
 if [ -n "$BRIDGE_RELAY_URL" ]; then
     echo "[bridge] Relay WhatsApp → ${BRIDGE_RELAY_URL}"
@@ -60,20 +61,8 @@ gateway:
   media_delivery_allow_dirs: []
   trust_recent_files: true
   trust_recent_files_seconds: 600
-$(if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+$(if [ -n "$BRIDGE_RELAY_URL" ]; then
   echo "  platforms:"
-  echo "    telegram:"
-  echo "      enabled: true"
-  echo "      token: ${TELEGRAM_BOT_TOKEN}"
-fi
-if [ -n "$BRIDGE_RELAY_URL" ]; then
-  if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "  platforms:"
-    echo "    telegram:"
-    echo "      enabled: true"
-    echo "      relay_url: ${BRIDGE_RELAY_URL}"
-    echo "      relay_api_key: ${BRIDGE_API_KEY}"
-  fi
   echo "    whatsapp:"
   echo "      enabled: true"
   echo "      relay_url: ${BRIDGE_RELAY_URL}"

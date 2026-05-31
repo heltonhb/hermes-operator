@@ -1,34 +1,26 @@
 FROM python:3.11-slim
 
-# Instala dependências do sistema
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Instala o Hermes Agent + aiohttp (necessário para o API Server)
-RUN pip install --no-cache-dir --upgrade hermes-agent aiohttp
-
-# Define diretório de trabalho
 WORKDIR /app
 
-# Configura o HERMES_HOME para um local controlado
-ENV HERMES_HOME=/app/hermes-home
-ENV PYTHONUNBUFFERED=1
+# Instala dependências do sistema
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Cria diretórios do Hermes
+# Instala Hermes Agent com extras de messaging (Telegram, WhatsApp, etc.)
+RUN pip install --no-cache-dir "hermes-agent[all]"
+
+# Cria diretório do Hermes
+ENV HERMES_HOME=/root/.hermes
 RUN mkdir -p $HERMES_HOME/logs $HERMES_HOME/sessions
 
-# Copia config e entrypoint
-COPY config.yaml $HERMES_HOME/config.yaml
+# Copia entrypoint e config
 COPY entrypoint.sh /app/entrypoint.sh
+COPY config.yaml /app/config.yaml
 RUN chmod +x /app/entrypoint.sh
 
-# Porta do Hugging Face Space (definida pela env PORT, padrão 7860)
-EXPOSE 7860
+# Porta do HF Spaces
+ENV PORT=7860
 
-# Cria usuário não-root (prática HF)
-RUN useradd -m -u 1000 user && chown -R user:user /app
-USER user
-
-ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["/app/entrypoint.sh"]
