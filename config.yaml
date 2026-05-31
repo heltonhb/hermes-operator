@@ -1,11 +1,10 @@
 # ── Modelo padrão ──────────────────────────────────────────────
-# Provider: opencode-zen (gratuito, sem chave de API)
-# Modelo: deepseek-v4-flash-free (mesmo usado localmente)
-# Pode ser sobrescrito via env vars HERMES_MODEL / HERMES_PROVIDER / OPENCODE_ZEN_BASE_URL
+# Provider: openrouter (com API key via OPENROUTER_API_KEY)
+# Modelo: deepseek/deepseek-v4-flash (mesma família DeepSeek V4 que o local)
+# Pode ser sobrescrito via env vars HERMES_MODEL / HERMES_PROVIDER
 model:
-  default: deepseek-v4-flash-free
-  provider: opencode-zen
-  base_url: https://opencode.ai/zen/v1
+  default: deepseek/deepseek-v4-flash
+  provider: openrouter
 
 # ── Gateway ────────────────────────────────────────────────────
 gateway:
