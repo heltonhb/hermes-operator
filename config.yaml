@@ -15,7 +15,7 @@ gateway:
     telegram:
       enabled: true
       # Token via env var TELEGRAM_BOT_TOKEN
-      # Webhook configurado via Telegram API setWebhook
+      # Usa long polling direto (conexão persistente no Space)
     whatsapp:
       enabled: true
       # WhatsApp usa relay para o gateway local

@@ -30,16 +30,15 @@ fi
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
 # ── Canais de delivery ─────────────────────────────────────────
-# Telegram pode ser direto (webhook via TELEGRAM_BOT_TOKEN) ou relay
+# Telegram usa long polling direto (token no ambiente do Space)
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
-TELEGRAM_WEBHOOK_URL="${TELEGRAM_WEBHOOK_URL:-}"
 
 # WhatsApp sempre como relay (precisa de conexão persistente)
 BRIDGE_RELAY_URL="${BRIDGE_RELAY_URL:-}"
 BRIDGE_API_KEY="${BRIDGE_API_KEY:-}"
 
 if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "[telegram] Modo direto via webhook para ${TELEGRAM_WEBHOOK_URL}"
+    echo "[telegram] Modo direto com long polling no Space"
 fi
 if [ -n "$BRIDGE_RELAY_URL" ]; then
     echo "[bridge] Relay WhatsApp → ${BRIDGE_RELAY_URL}"
@@ -63,10 +62,6 @@ $(if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
   echo "    telegram:"
   echo "      enabled: true"
   echo "      token: ${TELEGRAM_BOT_TOKEN}"
-  if [ -n "$TELEGRAM_WEBHOOK_URL" ]; then
-    echo "      webhook_url: ${TELEGRAM_WEBHOOK_URL}"
-    echo "      webhook_path: /webhooks/telegram"
-  fi
 fi
 if [ -n "$BRIDGE_RELAY_URL" ]; then
   if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
