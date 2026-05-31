@@ -29,16 +29,24 @@ fi
 # Cria diretório do Hermes se não existir
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
-# Configura relay de delivery WhatsApp/Telegram (bridge com gateway local)
+# ── Canais de delivery ─────────────────────────────────────────
+# Telegram pode ser direto (webhook via TELEGRAM_BOT_TOKEN) ou relay
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+TELEGRAM_WEBHOOK_URL="${TELEGRAM_WEBHOOK_URL:-}"
+
+# WhatsApp sempre como relay (precisa de conexão persistente)
 BRIDGE_RELAY_URL="${BRIDGE_RELAY_URL:-}"
 BRIDGE_API_KEY="${BRIDGE_API_KEY:-}"
 
+if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+    echo "[telegram] Modo direto via webhook para ${TELEGRAM_WEBHOOK_URL}"
+fi
 if [ -n "$BRIDGE_RELAY_URL" ]; then
-    echo "[bridge] Relay WhatsApp/Telegram → ${BRIDGE_RELAY_URL}"
+    echo "[bridge] Relay WhatsApp → ${BRIDGE_RELAY_URL}"
 fi
 
-# Se HERMES_MODEL ou HERMES_PROVIDER foi definida, atualiza config.yaml
-if [ -n "$HERMES_MODEL" ] || [ -n "$HERMES_PROVIDER" ]; then
+# Se HERMES_MODEL, HERMES_PROVIDER, TELEGRAM_BOT_TOKEN ou BRIDGE_RELAY_URL foi definida, gera config.yaml
+if [ -n "$HERMES_MODEL" ] || [ -n "$HERMES_PROVIDER" ] || [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$BRIDGE_RELAY_URL" ]; then
     echo "[config] Provider: ${HERMES_PROVIDER:-openrouter}"
     echo "[config] Modelo: ${HERMES_MODEL:-deepseek/deepseek-v4-flash}"
     cat > "$HERMES_HOME/config.yaml" <<EOF
@@ -50,12 +58,24 @@ gateway:
   media_delivery_allow_dirs: []
   trust_recent_files: true
   trust_recent_files_seconds: 600
-$(if [ -n "$BRIDGE_RELAY_URL" ]; then
+$(if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
   echo "  platforms:"
   echo "    telegram:"
   echo "      enabled: true"
-  echo "      relay_url: ${BRIDGE_RELAY_URL}"
-  echo "      relay_api_key: ${BRIDGE_API_KEY}"
+  echo "      token: ${TELEGRAM_BOT_TOKEN}"
+  if [ -n "$TELEGRAM_WEBHOOK_URL" ]; then
+    echo "      webhook_url: ${TELEGRAM_WEBHOOK_URL}"
+    echo "      webhook_path: /webhooks/telegram"
+  fi
+fi
+if [ -n "$BRIDGE_RELAY_URL" ]; then
+  if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+    echo "  platforms:"
+    echo "    telegram:"
+    echo "      enabled: true"
+    echo "      relay_url: ${BRIDGE_RELAY_URL}"
+    echo "      relay_api_key: ${BRIDGE_API_KEY}"
+  fi
   echo "    whatsapp:"
   echo "      enabled: true"
   echo "      relay_url: ${BRIDGE_RELAY_URL}"
