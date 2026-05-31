@@ -31,6 +31,7 @@ mkdir -p "$HERMES_HOME"/{logs,sessions}
 
 # ── Canais de delivery ─────────────────────────────────────────
 # Telegram usa long polling direto (token no ambiente do Space)
+# Precisa do extra hermes-agent[messaging] para python-telegram-bot
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 
 # WhatsApp sempre como relay (precisa de conexão persistente)
@@ -39,6 +40,8 @@ BRIDGE_API_KEY="${BRIDGE_API_KEY:-}"
 
 if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
     echo "[telegram] Modo direto com long polling no Space"
+    # Garante que python-telegram-bot está instalado (extra messaging)
+    pip3 install -q "python-telegram-bot[webhooks]==22.6" --no-cache-dir 2>&1 || echo "[telegram] Aviso: falha ao instalar python-telegram-bot"
 fi
 if [ -n "$BRIDGE_RELAY_URL" ]; then
     echo "[bridge] Relay WhatsApp → ${BRIDGE_RELAY_URL}"
