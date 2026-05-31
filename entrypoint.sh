@@ -14,8 +14,10 @@ set -e
 
 echo "=== Hermes Operator — Starting ==="
 
-# Provider opencode-zen é gratuito — não precisa de API key
-echo "[info] Provider: opencode-zen (gratuito, sem chave necessária)"
+# Provider opencode-zen é gratuito — não precisa de API key real
+# Mas o Hermes exige a env var definida. Usamos placeholder pois a API é pública.
+export OPENCODE_ZEN_API_KEY="${OPENCODE_ZEN_API_KEY:-sk-placeholder}"
+echo "[info] Provider: opencode-zen (gratuito, endpoint público)"
 
 # Cria diretório do Hermes se não existir
 mkdir -p "$HERMES_HOME"/{logs,sessions}
