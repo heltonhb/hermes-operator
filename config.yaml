@@ -11,6 +11,15 @@ gateway:
   media_delivery_allow_dirs: []
   trust_recent_files: true
   trust_recent_files_seconds: 600
+  platforms:
+    telegram:
+      enabled: true
+      relay_url: https://ce02-2804-7f0-b102-3ca8-9e3b-dfe2-c404-8da4.ngrok-free.app
+      relay_api_key: hermes-bridge-local-2026
+    whatsapp:
+      enabled: true
+      relay_url: https://ce02-2804-7f0-b102-3ca8-9e3b-dfe2-c404-8da4.ngrok-free.app
+      relay_api_key: hermes-bridge-local-2026
 
 # ── Segurança ──────────────────────────────────────────────────
 security:

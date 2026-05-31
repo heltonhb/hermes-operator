@@ -11,6 +11,8 @@ set -e
 #   HERMES_MODEL         — modelo (padrão: deepseek/deepseek-v4-flash)
 #   HERMES_PROVIDER      — provider (padrão: openrouter)
 #   API_SERVER_KEY       — chave para autenticar requests na API
+#   BRIDGE_RELAY_URL     — URL do gateway local (ngrok) para relay WhatsApp/Telegram
+#   BRIDGE_API_KEY       — chave de API do relay
 # ─────────────────────────────────────────────────────────────
 
 echo "=== Hermes Operator — Starting ==="
@@ -27,6 +29,14 @@ fi
 # Cria diretório do Hermes se não existir
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
+# Configura relay de delivery WhatsApp/Telegram (bridge com gateway local)
+BRIDGE_RELAY_URL="${BRIDGE_RELAY_URL:-}"
+BRIDGE_API_KEY="${BRIDGE_API_KEY:-}"
+
+if [ -n "$BRIDGE_RELAY_URL" ]; then
+    echo "[bridge] Relay WhatsApp/Telegram → ${BRIDGE_RELAY_URL}"
+fi
+
 # Se HERMES_MODEL ou HERMES_PROVIDER foi definida, atualiza config.yaml
 if [ -n "$HERMES_MODEL" ] || [ -n "$HERMES_PROVIDER" ]; then
     echo "[config] Provider: ${HERMES_PROVIDER:-openrouter}"
@@ -40,6 +50,17 @@ gateway:
   media_delivery_allow_dirs: []
   trust_recent_files: true
   trust_recent_files_seconds: 600
+$(if [ -n "$BRIDGE_RELAY_URL" ]; then
+  echo "  platforms:"
+  echo "    telegram:"
+  echo "      enabled: true"
+  echo "      relay_url: ${BRIDGE_RELAY_URL}"
+  echo "      relay_api_key: ${BRIDGE_API_KEY}"
+  echo "    whatsapp:"
+  echo "      enabled: true"
+  echo "      relay_url: ${BRIDGE_RELAY_URL}"
+  echo "      relay_api_key: ${BRIDGE_API_KEY}"
+fi)
 
 security:
   redact_secrets: true
