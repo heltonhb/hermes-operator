@@ -4,35 +4,30 @@ set -e
 # ─────────────────────────────────────────────────────────────
 #  Hermes Operator — Entrypoint para Hugging Face Docker Space
 # ─────────────────────────────────────────────────────────────
-# Espera:
-#   OPENROUTER_API_KEY   (obrigatório — configurar nas Secrets do HF)
-#   HERMES_MODEL         (opcional — padrão: deepseek/deepseek-chat)
-#   HERMES_PROVIDER      (opcional — padrão: openrouter)
-#   API_SERVER_KEY       (opcional — chave para autenticar requests)
+# Provider: opencode-zen (deepseek-v4-flash-free), gratuito sem chave
+# Opcionais via env vars:
+#   HERMES_MODEL         — modelo (padrão: deepseek-v4-flash-free)
+#   HERMES_PROVIDER      — provider (padrão: opencode-zen)
+#   OPENCODE_ZEN_BASE_URL— base URL (padrão: https://opencode.ai/zen/v1)
+#   API_SERVER_KEY       — chave para autenticar requests na API
 # ─────────────────────────────────────────────────────────────
 
 echo "=== Hermes Operator — Starting ==="
 
-# Validação: precisa de pelo menos uma API key configurada
-if [ -z "$OPENROUTER_API_KEY" ]; then
-    echo "ERRO: OPENROUTER_API_KEY não configurada!"
-    echo "Configure nas Secrets do Hugging Face Space:"
-    echo "  Settings → Repository Secrets → Add secret"
-    echo ""
-    echo "  OPENROUTER_API_KEY = sk-or-..."
-    exit 1
-fi
+# Provider opencode-zen é gratuito — não precisa de API key
+echo "[info] Provider: opencode-zen (gratuito, sem chave necessária)"
 
 # Cria diretório do Hermes se não existir
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
-# Se HERMES_MODEL foi definida, atualiza config.yaml
-if [ -n "$HERMES_MODEL" ]; then
-    echo "[config] Modelo: $HERMES_MODEL"
+# Se HERMES_MODEL ou HERMES_PROVIDER foi definida, atualiza config.yaml
+if [ -n "$HERMES_MODEL" ] || [ -n "$HERMES_PROVIDER" ]; then
+    echo "[config] Provider: ${HERMES_PROVIDER:-opencode-zen}"
+    echo "[config] Modelo: ${HERMES_MODEL:-deepseek-v4-flash-free}"
     cat > "$HERMES_HOME/config.yaml" <<EOF
 model:
-  default: ${HERMES_MODEL}
-  provider: ${HERMES_PROVIDER:-openrouter}
+  default: ${HERMES_MODEL:-deepseek-v4-flash-free}
+  provider: ${HERMES_PROVIDER:-opencode-zen}
 
 gateway:
   media_delivery_allow_dirs: []
