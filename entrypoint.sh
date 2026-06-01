@@ -8,20 +8,32 @@ set -e
 echo "=== Hermes Operator — Starting ==="
 
 # ── Validação ────────────────────────────────────────────────
-if [ -z "$OPENROUTER_API_KEY" ]; then
-    echo "ERRO: OPENROUTER_API_KEY não configurada!"
-    echo "Configure nas Secrets do Hugging Face Space:"
+if [ -z "$GROQ_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ]; then
+    echo "ERRO: Nenhuma API key configurada!"
+    echo "Configure GROQ_API_KEY (recomendado) ou OPENROUTER_API_KEY"
+    echo "nas Secrets do Hugging Face Space:"
     echo "  Settings → Repository Secrets → Add secret"
-    echo "  Nome: OPENROUTER_API_KEY"
     exit 1
 fi
 
 # ── Diretórios ───────────────────────────────────────────────
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
+# ── Validação GROQ ────────────────────────────────────────────
+if [ -n "$GROQ_API_KEY" ]; then
+    echo "[groq] API key encontrada ✅"
+elif [ -n "$OPENROUTER_API_KEY" ]; then
+    echo "[groq] AVISO: GROQ_API_KEY não configurada — usando OpenRouter como fallback"
+    HERMES_PROVIDER="${HERMES_PROVIDER:-openrouter}"
+    HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-chat}"
+else
+    echo "[groq] ERRO: Nenhum provider configurado"
+    exit 1
+fi
+
 # ── Gera config.yaml ─────────────────────────────────────────
-HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash}"
-HERMES_PROVIDER="${HERMES_PROVIDER:-openrouter}"
+HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
+HERMES_PROVIDER="${HERMES_PROVIDER:-groq}"
 
 echo "[config] Provider: ${HERMES_PROVIDER}"
 echo "[config] Modelo: ${HERMES_MODEL}"
@@ -48,6 +60,29 @@ cat > "$HERMES_HOME/config.yaml" <<EOF
 model:
   default: ${HERMES_MODEL}
   provider: ${HERMES_PROVIDER}
+
+providers:
+  groq:
+    name: Groq (Free)
+    key_env: GROQ_API_KEY
+    api: https://api.groq.com/openai/v1
+    default_model: llama-3.3-70b-versatile
+    models:
+    - llama-3.3-70b-versatile
+    - llama-3.1-8b-instant
+    - meta-llama/llama-4-scout-17b-16e-instruct
+    - deepseek-r1-distill-70b
+    api_mode: chat_completions
+  openrouter:
+    name: OpenRouter
+    key_env: OPENROUTER_API_KEY
+    api: https://openrouter.ai/api/v1
+    default_model: deepseek/deepseek-chat
+    models:
+    - deepseek/deepseek-chat
+    - deepseek/deepseek-r1
+    - anthropic/claude-sonnet-4
+    api_mode: chat_completions
 
 gateway:
   media_delivery_allow_dirs: []
