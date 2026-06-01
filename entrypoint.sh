@@ -19,23 +19,6 @@ fi
 # ── Diretórios ───────────────────────────────────────────────
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
-# ── Telegram ─────────────────────────────────────────────────
-TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
-
-if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "[telegram] Poller independente rodando no Space"
-    nohup python3 /app/telegram_poller.py >> /tmp/telegram-poller.log 2>&1 &
-    echo "[telegram] PID: $!"
-fi
-
-# ── Bridge WhatsApp ─────────────────────────────────────────
-BRIDGE_RELAY_URL="${BRIDGE_RELAY_URL:-}"
-BRIDGE_API_KEY="${BRIDGE_API_KEY:-}"
-
-if [ -n "$BRIDGE_RELAY_URL" ]; then
-    echo "[bridge] Relay WhatsApp → ${BRIDGE_RELAY_URL}"
-fi
-
 # ── Gera config.yaml ─────────────────────────────────────────
 HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash}"
 HERMES_PROVIDER="${HERMES_PROVIDER:-openrouter}"
@@ -43,17 +26,22 @@ HERMES_PROVIDER="${HERMES_PROVIDER:-openrouter}"
 echo "[config] Provider: ${HERMES_PROVIDER}"
 echo "[config] Modelo: ${HERMES_MODEL}"
 
-# Monta bloco de plataformas se bridge configurado
-PLATFORMS_YAML=""
+# Monta bloco de plataformas
+PLATFORMS_YAML="  platforms:"
+if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+    echo "[telegram] Habilitado no Gateway"
+    PLATFORMS_YAML="${PLATFORMS_YAML}
+    telegram:
+      enabled: true
+      token: '${TELEGRAM_BOT_TOKEN}'"
+fi
 if [ -n "$BRIDGE_RELAY_URL" ]; then
-    PLATFORMS_YAML=$(cat <<-YAML
-  platforms:
+    echo "[bridge] Relay WhatsApp → ${BRIDGE_RELAY_URL}"
+    PLATFORMS_YAML="${PLATFORMS_YAML}
     whatsapp:
       enabled: true
       relay_url: ${BRIDGE_RELAY_URL}
-      relay_api_key: ${BRIDGE_API_KEY}
-YAML
-)
+      relay_api_key: ${BRIDGE_API_KEY}"
 fi
 
 cat > "$HERMES_HOME/config.yaml" <<EOF
