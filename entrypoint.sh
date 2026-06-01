@@ -120,14 +120,34 @@ if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
     echo "Python: $(python --version 2>&1 || echo 'NOT FOUND')"
     echo "Poller file: $(test -f /app/telegram_poller.py && echo 'OK' || echo 'MISSING')"
     echo "Requests: $(python3 -c 'import requests; print(requests.__version__)' 2>&1 || echo 'FAIL')"
-    echo "Telegram test: $(python3 <<'PYEOF' 2>&1 || echo 'FAIL'
+    echo "Telegram getMe: $(python3 <<'PYEOF' 2>&1 || echo 'FAIL'
 import requests, os
 token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-r = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=10)
+r = requests.get(f'https://api.telegram.org/bot{token}/getMe', timeout=10)
 print(r.json().get('result', {}).get('username', 'FAIL'))
 PYEOF
     )"
     echo "=== END DIAGNOSTIC ==="
+    
+    # Teste real de getUpdates antes de iniciar o poller
+    echo "[telegram] Testando getUpdates..."
+    python3 <<'PYEOF' 2>&1
+import requests, os, json
+token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+r = requests.get(f'https://api.telegram.org/bot{token}/getUpdates', params={'timeout': 5}, timeout=10)
+data = r.json()
+if data.get('ok'):
+    updates = data['result']
+    print(f'  Updates pendentes: {len(updates)}')
+    for u in updates:
+        msg = u.get('message', {})
+        print(f'    id={u["update_id"]} text={msg.get("text","?")!r}')
+    if updates:
+        last_uid = updates[-1]['update_id']
+        print(f'  Proximo offset seria: {last_uid + 1}')
+else:
+    print(f'  Erro getUpdates: {data.get("description", "?")}')
+PYEOF
     
     echo "[telegram] Iniciando poller em background..."
     POLLER_LOG="$HERMES_HOME/logs/telegram_poller.log"
@@ -150,6 +170,7 @@ PYEOF
     fi
 
     if [ -n "$POLLER_PY" ]; then
+        # Start poller in background
         $POLLER_PY /app/telegram_poller.py >> "$POLLER_LOG" 2>&1 &
         POLLER_PID=$!
         echo "[telegram] Poller PID: ${POLLER_PID} (using $POLLER_PY)"
@@ -158,7 +179,7 @@ PYEOF
             echo "[telegram] Poller rodando OK"
         else
             echo "[telegram] Poller MORREU! Log tail:"
-            tail -5 "$POLLER_LOG" 2>/dev/null || echo "  (log vazio)"
+            tail -30 "$POLLER_LOG" 2>/dev/null || echo "  (log vazio)"
         fi
     else
         echo "[telegram] ERRO: Python nao encontrado!"
