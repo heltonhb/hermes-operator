@@ -175,6 +175,22 @@ cleanup() {
 }
 trap cleanup SIGTERM SIGINT
 
+# Notificar Telegram que o Space reiniciou
+HOSTNAME=$(hostname 2>/dev/null || echo "HF Space")
+GIT_HASH=$(git log --oneline -1 2>/dev/null || echo "N/A")
+STARTUP_MSG=$(cat <<MSG
+✅ *Hermes Operator reiniciado*
+Container: ${HOSTNAME}
+Versao: ${GIT_HASH}
+Poller: $( [ -n "${POLLER_PID}" ] && echo "PID ${POLLER_PID} ativo" || echo "desligado" )
+Gateway: PID ${GATEWAY_PID}
+MSG
+)
+curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    --data-urlencode "chat_id=1999968153" \
+    --data-urlencode "parse_mode=Markdown" \
+    --data-urlencode "text=${STARTUP_MSG}" > /dev/null 2>&1 || true
+
 echo "=== Hermes Operator pronto ==="
 wait $GATEWAY_PID
 echo "[gateway] Processo encerrado"
