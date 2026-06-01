@@ -112,16 +112,33 @@ if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
     export HERMES_API_URL="http://127.0.0.1:${API_SERVER_PORT}"
     export HERMES_API_KEY="${API_SERVER_KEY}"
     export TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN}"
-    python /app/telegram_poller.py \
-      >> "$POLLER_LOG" 2>&1 &
-    POLLER_PID=$!
-    echo "[telegram] Poller PID: ${POLLER_PID}"
-    sleep 3
-    if kill -0 $POLLER_PID 2>/dev/null; then
-        echo "[telegram] Poller rodando OK"
+
+    # Check what's available
+    echo "[telegram] Python check: $(command -v python3 || echo 'python3 not found')"
+    echo "[telegram] Python check: $(command -v python || echo 'python not found')"
+    test -f /app/telegram_poller.py && echo "[telegram] Poller file: OK" || echo "[telegram] Poller file: MISSING"
+
+    # Determine which python to use
+    POLLER_PY=""
+    if command -v python3 >/dev/null 2>&1; then
+        POLLER_PY="python3"
+    elif command -v python >/dev/null 2>&1; then
+        POLLER_PY="python"
+    fi
+
+    if [ -n "$POLLER_PY" ]; then
+        $POLLER_PY /app/telegram_poller.py >> "$POLLER_LOG" 2>&1 &
+        POLLER_PID=$!
+        echo "[telegram] Poller PID: ${POLLER_PID} (using $POLLER_PY)"
+        sleep 3
+        if kill -0 $POLLER_PID 2>/dev/null; then
+            echo "[telegram] Poller rodando OK"
+        else
+            echo "[telegram] Poller MORREU! Log tail:"
+            tail -5 "$POLLER_LOG" 2>/dev/null || echo "  (log vazio)"
+        fi
     else
-        echo "[telegram] Poller MORREU!"
-        tail -5 "$POLLER_LOG" 2>/dev/null || echo "  (log vazio)"
+        echo "[telegram] ERRO: Python nao encontrado!"
     fi
 else
     echo "[telegram] token nao configurado — poller nao iniciado"
