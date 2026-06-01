@@ -127,11 +127,11 @@ r = requests.get(f'https://api.telegram.org/bot{token}/getMe', timeout=10)
 print(r.json().get('result', {}).get('username', 'FAIL'))
 PYEOF
     )"
-    echo "=== END DIAGNOSTIC ===
+    echo "=== END DIAGNOSTIC ==="
     
     # Teste rapido de getUpdates via curl (mais confiavel no HF Space)
-    echo \"[telegram] Testando getUpdates (curl)...\"
-    curl -sf --connect-timeout 10 --max-time 15 \\\n        \"https://api.telegram.org/bot\${TELEGRAM_BOT_TOKEN}/getUpdates?timeout=2\" 2>&1 | \\\n        python3 -c \"
+    echo "[telegram] Testando getUpdates (curl)..."
+    curl -sf --connect-timeout 10 --max-time 15         "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?timeout=2" 2>&1 |         python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
@@ -139,15 +139,14 @@ try:
     print(f'  Updates pendentes: {len(updates)}')
     for u in updates:
         m = u.get('message', {})
-        txt = m.get('text', \"\")[:50]
-        print(f'    id={u[\\"update_id\\"]} text={txt!r}')
+        txt = m.get('text', '')[:50]
+        print(f'    id={u["update_id"]} text={txt!r}')
     if updates:
-        print(f'  Proximo offset: {updates[-1][\\"update_id\\"] + 1}')
+        print(f'  Proximo offset: {updates[-1]["update_id"] + 1}')
 except Exception as e:
     print(f'  Erro: {e}')
-\" 2>&1 || echo \"  curl falhou (timeout normal)\"
-    
-    echo \"[telegram] Iniciando poller em background...\"echo "[telegram] Iniciando poller em background..."
+" 2>&1 || echo "  curl falhou (timeout normal)"
+    echo "[telegram] Iniciando poller em background..."
     POLLER_LOG="$HERMES_HOME/logs/telegram_poller.log"
     # ShellCheck: env vars sourced from container secrets
     export HERMES_API_URL="http://127.0.0.1:${API_SERVER_PORT}"
