@@ -194,6 +194,16 @@ NOTIFY_RESP=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$
 echo "[notify] HTTP $(echo "${NOTIFY_RESP}" | tail -1)"
 echo "[notify] Resposta: $(echo "${NOTIFY_RESP}" | head -n -1 | tr -d '\n' | head -c 200)"
 
+# Verificar se o poller ainda está vivo
+if [ -n "${POLLER_PID}" ]; then
+    if kill -0 $POLLER_PID 2>/dev/null; then
+        echo "[telegram] Poller ainda vivo (PID $POLLER_PID)"
+    else
+        echo "[telegram] Poller MORREU! Log:"
+        tail -30 "$POLLER_LOG" 2>/dev/null || echo "  (log vazio)"
+    fi
+fi
+
 echo "=== Hermes Operator pronto ==="
 wait $GATEWAY_PID
 echo "[gateway] Processo encerrado"
