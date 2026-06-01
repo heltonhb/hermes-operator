@@ -5,20 +5,31 @@ Polla mensagens do Telegram e usa Hermes API Server pra processar.
 Respostas sao enviadas de volta via Telegram Bot API.
 Independe do Telegram platform adapter do Hermes Gateway.
 """
-import os, sys, json, time, logging, threading, requests, glob
+import os, sys, json, time, logging, glob
 from datetime import datetime, timedelta
 
-# Force IPv4 for Telegram API (avoid IPv6 SYN-SENT hangs)
-try:
-    import socket
-    requests.packages.urllib3.util.connection.HAS_IPV6 = False
-    log = logging.getLogger("telegram-bridge")
-    log.info("Forced IPv4 for HTTP connections")
-except Exception:
-    pass
+# ── Force IPv4 socket-level BEFORE requests/urllib3 init ─────
+import socket
+
+# Monkey-patch socket.create_connection to resolve only IPv4
+_orig_create_conn = socket.create_connection
+
+
+def _ipv4_create_conn(address, timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
+                       source_address=None, **kwargs):
+    host, port = address
+    if source_address is None:
+        source_address = ('0.0.0.0', 0)
+    return _orig_create_conn((host, port), timeout, source_address, **kwargs)
+
+
+socket.create_connection = _ipv4_create_conn
+import requests
+requests.packages.urllib3.util.connection.HAS_IPV6 = False
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("telegram-bridge")
+log.info("Forced IPv4 for all HTTP connections (socket-level patch)")
 
 # ── Config ──────────────────────────────────────────────────────
 # Tenta ler token do .env se não estiver no ambiente
@@ -56,15 +67,33 @@ if not HERMES_API_KEY:
 
 
 def tg_api(method, data=None):
-    """Call Telegram Bot API"""
+    """Call Telegram Bot API with retry on connection/SSL errors"""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/{method}"
-    try:
-        # Must be > poll timeout (30s) + buffer
-        r = requests.post(url, json=data, timeout=45)
-        return r.json()
-    except Exception as e:
-        log.error(f"tg_api({method}): {e}")
-        return {"ok": False, "description": str(e)}
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Long timeout to handle slow SSL handshakes from HF Space
+            r = requests.post(url, json=data, timeout=60)
+            result = r.json()
+            if result.get("ok"):
+                return result
+            # 409 Conflict means another poller is active — don't retry
+            if result.get("error_code") == 409:
+                return result
+            # Other errors (like 429 rate limit) — retry
+            if attempt < max_retries - 1:
+                log.warning(f"tg_api({method}) attempt {attempt+1}/{max_retries}: {result.get('description', '?')}, retrying...")
+                time.sleep(2 ** attempt)
+                continue
+            return result
+        except Exception as e:
+            if attempt < max_retries - 1:
+                log.warning(f"tg_api({method}) attempt {attempt+1}/{max_retries} failed: {e}, retrying...")
+                time.sleep(2 ** attempt)
+                continue
+            log.error(f"tg_api({method}) all {max_retries} attempts failed: {e}")
+            return {"ok": False, "description": str(e)}
+    return {"ok": False, "description": "max retries exceeded"}
 
 
 def hermes_chat(chat_id, text, user_id, username):
