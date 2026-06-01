@@ -66,21 +66,29 @@ if not HERMES_API_KEY:
 # ────────────────────────────────────────────────────────────────
 
 
-def tg_api(method, data=None):
-    """Call Telegram Bot API with retry on connection/SSL errors"""
+def tg_api(method, data=None, timeout=None):
+    """Call Telegram Bot API with retry on connection/SSL errors
+    
+    Args:
+        method: Telegram API method (getUpdates, sendMessage, getMe, etc.)
+        data: JSON body for the request
+        timeout: Request timeout in seconds. 
+                 Default: 25 for getUpdates (long poll), 15 for everything else
+    """
+    if timeout is None:
+        timeout = 25 if method == "getUpdates" else 15
+    
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/{method}"
-    max_retries = 3
+    max_retries = 2 if method == "getUpdates" else 1
+    
     for attempt in range(max_retries):
         try:
-            # Long timeout to handle slow SSL handshakes from HF Space
-            r = requests.post(url, json=data, timeout=60)
+            r = requests.post(url, json=data, timeout=timeout)
             result = r.json()
             if result.get("ok"):
                 return result
-            # 409 Conflict means another poller is active — don't retry
             if result.get("error_code") == 409:
                 return result
-            # Other errors (like 429 rate limit) — retry
             if attempt < max_retries - 1:
                 log.warning(f"tg_api({method}) attempt {attempt+1}/{max_retries}: {result.get('description', '?')}, retrying...")
                 time.sleep(2 ** attempt)
@@ -91,7 +99,7 @@ def tg_api(method, data=None):
                 log.warning(f"tg_api({method}) attempt {attempt+1}/{max_retries} failed: {e}, retrying...")
                 time.sleep(2 ** attempt)
                 continue
-            log.error(f"tg_api({method}) all {max_retries} attempts failed: {e}")
+            log.error(f"tg_api({method}) failed: {e}")
             return {"ok": False, "description": str(e)}
     return {"ok": False, "description": "max retries exceeded"}
 
@@ -329,7 +337,7 @@ def poll():
 
 def main():
     if not TELEGRAM_TOKEN:
-        log.error("TELEGRAM_BOT_TOKEN not set")
+        log.error("TELEGRAM_BOT_TOKEN not set — you must set via env or .env")
         sys.exit(1)
 
     bot_info = tg_api("getMe")
@@ -337,10 +345,10 @@ def main():
         bot_user = bot_info["result"]["username"]
         log.info(f"Bot @{bot_user} authenticated! ✅")
     else:
-        log.error(f"Bot auth failed: {bot_info.get('description')}")
-        sys.exit(1)
+        log.warning(f"Bot getMe failed: {bot_info.get('description')}")
+        log.warning("Will try polling anyway — connection may be intermittent")
 
-    # Quick API test
+    # Quick API test (non-fatal if fails)
     log.info(f"Testing Hermes API connection...")
     try:
         r = requests.get(f"{HERMES_API}/v1/health", timeout=10)
