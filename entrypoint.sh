@@ -1,47 +1,27 @@
 #!/bin/bash
 set -e
 
-# ─────────────────────────────────────────────────────────────
-#  Hermes Operator — Entrypoint para Hugging Face Docker Space
-# ─────────────────────────────────────────────────────────────
-
 echo "=== Hermes Operator — Starting ==="
 
-# ── Validação ────────────────────────────────────────────────
 if [ -z "$GROQ_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ]; then
     echo "ERRO: Nenhuma API key configurada!"
-    echo "Configure GROQ_API_KEY (recomendado) ou OPENROUTER_API_KEY"
-    echo "nas Secrets do Hugging Face Space:"
-    echo "  Settings → Repository Secrets → Add secret"
     exit 1
 fi
 
-# ── Diretórios ───────────────────────────────────────────────
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
-# ── Validação GROQ ────────────────────────────────────────────
 if [ -n "$GROQ_API_KEY" ]; then
-    echo "[groq] API key encontrada ✅"
-elif [ -n "$OPENROUTER_API_KEY" ]; then
-    echo "[groq] AVISO: GROQ_API_KEY não configurada — usando OpenRouter como fallback"
+    echo "[groq] API key encontrada OK"
+else
     HERMES_PROVIDER="${HERMES_PROVIDER:-openrouter}"
     HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-chat}"
-else
-    echo "[groq] ERRO: Nenhum provider configurado"
-    exit 1
 fi
 
-# ── Gera config.yaml ─────────────────────────────────────────
 HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
 HERMES_PROVIDER="${HERMES_PROVIDER:-groq}"
 
-echo "[config] Provider: ${HERMES_PROVIDER}"
-echo "[config] Modelo: ${HERMES_MODEL}"
-
-# Monta bloco de plataformas (Telegram NÃO vai no Gateway — usa poller separado)
 PLATFORMS_YAML="  platforms:"
 if [ -n "$BRIDGE_RELAY_URL" ]; then
-    echo "[bridge] Relay WhatsApp → ${BRIDGE_RELAY_URL}"
     PLATFORMS_YAML="${PLATFORMS_YAML}
     whatsapp:
       enabled: true
@@ -49,7 +29,7 @@ if [ -n "$BRIDGE_RELAY_URL" ]; then
       relay_api_key: ${BRIDGE_API_KEY}"
 fi
 
-cat > "$HERMES_HOME/config.yaml" <<EOF
+cat > "$HERMES_HOME/config.yaml" <<CONFEOF
 model:
   default: ${HERMES_MODEL}
   provider: ${HERMES_PROVIDER}
@@ -85,45 +65,36 @@ ${PLATFORMS_YAML}
 security:
   redact_secrets: true
   tirith_enabled: true
-
 sessions:
   auto_prune: true
   retention_days: 30
-
 display:
   language: pt
   show_cost: false
-
 platform_toolsets:
   api_server:
     - web
-EOF
+CONFEOF
 
-# ── API Server ───────────────────────────────────────────────
 export API_SERVER_ENABLED=true
 export API_SERVER_HOST=0.0.0.0
 export API_SERVER_PORT=${PORT:-7860}
 
 if [ -n "$API_SERVER_KEY" ]; then
     export API_SERVER_KEY="$API_SERVER_KEY"
-    echo "[auth] API Server com chave de autenticação"
-else
-    echo "[auth] API Server sem autenticação"
-    echo "       Recomendo definir API_SERVER_KEY nas Secrets do HF!"
+    echo "[auth] API Server com chave"
 fi
 
-# ── Start Gateway (background) ───────────────────────────────
 echo "=== Iniciando Hermes Gateway na porta ${API_SERVER_PORT} ==="
-hermes gateway run --verbose &
+hermes gateway run --verbose >> "$HERMES_HOME/logs/gateway.log" 2>&1 &
 GATEWAY_PID=$!
 echo "[gateway] PID: ${GATEWAY_PID}"
 
-# ── Aguarda API ficar pronta ────────────────────────────────
 echo "[gateway] Aguardando API ficar pronta..."
 READY=false
 for i in $(seq 1 30); do
     if curl -sf "http://127.0.0.1:${API_SERVER_PORT}/v1/health" > /dev/null 2>&1; then
-        echo "[gateway] API pronta após ${i}s ✅"
+        echo "[gateway] API pronta depois de ${i}s OK"
         READY=true
         break
     fi
@@ -131,23 +102,31 @@ for i in $(seq 1 30); do
 done
 
 if [ "$READY" != "true" ]; then
-    echo "[gateway] AVISO: API não respondeu após 30s — continuando mesmo assim"
+    echo "[gateway] AVISO: API nao respondeu depois de 30s"
 fi
 
-# ── Telegram Poller ──────────────────────────────────────────
 if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
     echo "[telegram] Iniciando poller em background..."
-    HERMES_API_URL="http://127.0.0.1:${API_SERVER_PORT}" \
-    HERMES_API_KEY="${API_SERVER_KEY}" \
-    TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN}" \
-    python3 /app/telegram_poller.py &
+    POLLER_LOG="$HERMES_HOME/logs/telegram_poller.log"
+    # ShellCheck: env vars sourced from container secrets
+    export HERMES_API_URL="http://127.0.0.1:${API_SERVER_PORT}"
+    export HERMES_API_KEY="${API_SERVER_KEY}"
+    export TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN}"
+    python /app/telegram_poller.py \
+      >> "$POLLER_LOG" 2>&1 &
     POLLER_PID=$!
     echo "[telegram] Poller PID: ${POLLER_PID}"
+    sleep 3
+    if kill -0 $POLLER_PID 2>/dev/null; then
+        echo "[telegram] Poller rodando OK"
+    else
+        echo "[telegram] Poller MORREU!"
+        tail -5 "$POLLER_LOG" 2>/dev/null || echo "  (log vazio)"
+    fi
 else
-    echo "[telegram] TELEGRAM_BOT_TOKEN não configurado — poller não iniciado"
+    echo "[telegram] token nao configurado — poller nao iniciado"
 fi
 
-# ── Trap para shutdown limpo ────────────────────────────────
 cleanup() {
     echo "=== Shutting down ==="
     kill ${GATEWAY_PID} ${POLLER_PID:-} 2>/dev/null || true
@@ -156,7 +135,6 @@ cleanup() {
 }
 trap cleanup SIGTERM SIGINT
 
-# ── Mantém container vivo até o gateway sair ────────────────
 echo "=== Hermes Operator pronto ==="
 wait $GATEWAY_PID
 echo "[gateway] Processo encerrado"
