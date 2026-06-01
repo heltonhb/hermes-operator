@@ -38,15 +38,8 @@ HERMES_PROVIDER="${HERMES_PROVIDER:-groq}"
 echo "[config] Provider: ${HERMES_PROVIDER}"
 echo "[config] Modelo: ${HERMES_MODEL}"
 
-# Monta bloco de plataformas
+# Monta bloco de plataformas (Telegram NÃO vai no Gateway — usa poller separado)
 PLATFORMS_YAML="  platforms:"
-if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "[telegram] Habilitado no Gateway"
-    PLATFORMS_YAML="${PLATFORMS_YAML}
-    telegram:
-      enabled: true
-      token: '${TELEGRAM_BOT_TOKEN}'"
-fi
 if [ -n "$BRIDGE_RELAY_URL" ]; then
     echo "[bridge] Relay WhatsApp → ${BRIDGE_RELAY_URL}"
     PLATFORMS_YAML="${PLATFORMS_YAML}
@@ -119,7 +112,51 @@ else
     echo "       Recomendo definir API_SERVER_KEY nas Secrets do HF!"
 fi
 
-# ── Start ────────────────────────────────────────────────────
+# ── Start Gateway (background) ───────────────────────────────
 echo "=== Iniciando Hermes Gateway na porta ${API_SERVER_PORT} ==="
+hermes gateway run --verbose &
+GATEWAY_PID=$!
+echo "[gateway] PID: ${GATEWAY_PID}"
 
-exec hermes gateway run --verbose
+# ── Aguarda API ficar pronta ────────────────────────────────
+echo "[gateway] Aguardando API ficar pronta..."
+READY=false
+for i in $(seq 1 30); do
+    if curl -sf "http://127.0.0.1:${API_SERVER_PORT}/v1/health" > /dev/null 2>&1; then
+        echo "[gateway] API pronta após ${i}s ✅"
+        READY=true
+        break
+    fi
+    sleep 1
+done
+
+if [ "$READY" != "true" ]; then
+    echo "[gateway] AVISO: API não respondeu após 30s — continuando mesmo assim"
+fi
+
+# ── Telegram Poller ──────────────────────────────────────────
+if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+    echo "[telegram] Iniciando poller em background..."
+    HERMES_API_URL="http://127.0.0.1:${API_SERVER_PORT}" \
+    HERMES_API_KEY="${API_SERVER_KEY}" \
+    TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN}" \
+    python3 /app/telegram_poller.py &
+    POLLER_PID=$!
+    echo "[telegram] Poller PID: ${POLLER_PID}"
+else
+    echo "[telegram] TELEGRAM_BOT_TOKEN não configurado — poller não iniciado"
+fi
+
+# ── Trap para shutdown limpo ────────────────────────────────
+cleanup() {
+    echo "=== Shutting down ==="
+    kill ${GATEWAY_PID} ${POLLER_PID:-} 2>/dev/null || true
+    wait || true
+    exit 0
+}
+trap cleanup SIGTERM SIGINT
+
+# ── Mantém container vivo até o gateway sair ────────────────
+echo "=== Hermes Operator pronto ==="
+wait $GATEWAY_PID
+echo "[gateway] Processo encerrado"
