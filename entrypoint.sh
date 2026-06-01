@@ -115,12 +115,18 @@ export TELEGRAM_BOT_TOKEN
 if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
     echo "=== TELEGRAM POLLER DIAGNOSTIC ==="
     echo "Token prefix: $(expr substr $TELEGRAM_BOT_TOKEN 1 8)..."
-    echo "API_KEY: ${HERMES_API_KEY:+SET}${HERMES_API_KEY:-NOT SET}"
+    echo "API_KEY: $(echo ${HERMES_API_KEY} | head -c 15)... (set=${HERMES_API_KEY:+yes})"
     echo "Python3: $(python3 --version 2>&1 || echo 'NOT FOUND')"
     echo "Python: $(python --version 2>&1 || echo 'NOT FOUND')"
     echo "Poller file: $(test -f /app/telegram_poller.py && echo 'OK' || echo 'MISSING')"
     echo "Requests: $(python3 -c 'import requests; print(requests.__version__)' 2>&1 || echo 'FAIL')"
-    echo "Telegram test: $(python3 -c 'import requests, os; r=requests.get(\"https://api.telegram.org/bot\" + os.environ.get(\"TELEGRAM_BOT_TOKEN\",\"\") + \"/getMe\", timeout=10); print(r.json().get(\"result\",{}).get(\"username\",\"FAIL\"))' 2>&1 || echo 'FAIL')"
+    echo "Telegram test: $(python3 <<'PYEOF' 2>&1 || echo 'FAIL'
+import requests, os
+token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+r = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=10)
+print(r.json().get('result', {}).get('username', 'FAIL'))
+PYEOF
+    )"
     echo "=== END DIAGNOSTIC ==="
     
     echo "[telegram] Iniciando poller em background..."
