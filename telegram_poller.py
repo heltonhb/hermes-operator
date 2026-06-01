@@ -5,7 +5,8 @@ Polla mensagens do Telegram e usa Hermes API Server pra processar.
 Respostas sao enviadas de volta via Telegram Bot API.
 Independe do Telegram platform adapter do Hermes Gateway.
 """
-import os, sys, json, time, logging, threading, requests
+import os, sys, json, time, logging, threading, requests, glob
+from datetime import datetime, timedelta
 
 # Force IPv4 for Telegram API (avoid IPv6 SYN-SENT hangs)
 try:
@@ -159,23 +160,7 @@ def handle_update(update):
 
     if response:
         log.info(f"Response to @{username}: {len(response)} chars")
-        # Telegram has 4096 char limit, split if needed
-        if len(response) > 4000:
-            # Split into chunks of 4000 chars
-            for i in range(0, len(response), 4000):
-                chunk = response[i:i+4000]
-                tg_api("sendMessage", {
-                    "chat_id": chat_id,
-                    "text": chunk,
-                    "parse_mode": "Markdown"
-                })
-                time.sleep(0.5)  # Avoid hitting rate limits
-        else:
-            tg_api("sendMessage", {
-                "chat_id": chat_id,
-                "text": response,
-                "parse_mode": "Markdown"
-            })
+        send_message_chunked(chat_id, response)
     else:
         tg_api("sendMessage", {
             "chat_id": chat_id,
@@ -183,6 +168,88 @@ def handle_update(update):
                     "O servidor pode estar inicializando (cold start). "
                     "Tente novamente em alguns segundos."
         })
+
+
+def send_message_chunked(chat_id, text, parse_mode="Markdown"):
+    """Send a message to Telegram, splitting if it exceeds 4096 chars"""
+    if len(text) > 4000:
+        for i in range(0, len(text), 4000):
+            chunk = text[i:i+4000]
+            tg_api("sendMessage", {
+                "chat_id": chat_id,
+                "text": chunk,
+                "parse_mode": parse_mode
+            })
+            time.sleep(0.5)
+    else:
+        tg_api("sendMessage", {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": parse_mode
+        })
+
+
+# ── Cron Outbox ──────────────────────────────────────────────
+# Bridge polls cron output directories for new cron job files
+# and forwards them to the user's Telegram chat.
+
+CRON_OUTPUT_DIR = os.path.expanduser("~/.hermes/cron/output")
+TRACKING_FILE = os.path.expanduser("~/.hermes/telegram_sent_files.json")
+
+# Cron job directory to monitor (Copa 2026 morning briefing - único)
+WATCHED_JOB_IDS = [
+    "3db6ea02dc8d",
+]
+TARGET_CHAT_ID = 1999968153
+
+
+def load_sent_files():
+    if os.path.exists(TRACKING_FILE):
+        try:
+            with open(TRACKING_FILE) as f:
+                return set(json.load(f))
+        except Exception:
+            return set()
+    return set()
+
+
+def save_sent_files(sent_set):
+    with open(TRACKING_FILE, "w") as f:
+        json.dump(list(sent_set), f)
+
+
+def check_cron_outbox():
+    """Check cron output dirs for new .md files and send to Telegram"""
+    sent_files = load_sent_files()
+    new_sent = False
+
+    for job_id in WATCHED_JOB_IDS:
+        job_dir = os.path.join(CRON_OUTPUT_DIR, job_id)
+        if not os.path.isdir(job_dir):
+            continue
+
+        for fpath in sorted(glob.glob(os.path.join(job_dir, "*.md"))):
+            if fpath in sent_files:
+                continue
+            # Skip files older than 26 hours (cron runs daily at 7am)
+            mtime = os.path.getmtime(fpath)
+            if (time.time() - mtime) > 60 * 60 * 26:
+                continue
+            try:
+                with open(fpath) as f:
+                    content = f.read().strip()
+                if not content:
+                    continue
+                log.info(f"Outbox: sending {os.path.basename(fpath)} to Telegram")
+                send_message_chunked(TARGET_CHAT_ID, content)
+                sent_files.add(fpath)
+                new_sent = True
+                time.sleep(1)
+            except Exception as e:
+                log.error(f"Outbox error reading {fpath}: {e}")
+
+    if new_sent:
+        save_sent_files(sent_files)
 
 
 def poll():
@@ -210,8 +277,13 @@ def poll():
                     log.info(f"Update {uid}")
                     handle_update(update)
                     offset = uid + 1
-                    # Brief pause between updates
                     time.sleep(0.3)
+
+                # After processing updates, check cron outbox
+                try:
+                    check_cron_outbox()
+                except Exception as e:
+                    log.error(f"Outbox check error: {e}")
             elif updates.get("error_code") == 409:
                 log.warning("409 Conflict - another poller is active, waiting 15s...")
                 time.sleep(15)
