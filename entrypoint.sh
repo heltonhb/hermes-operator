@@ -91,9 +91,9 @@ export API_SERVER_ENABLED=true
 export API_SERVER_HOST=0.0.0.0
 export API_SERVER_PORT=${PORT:-7860}
 
-API_SERVER_KEY="${API_SERVER_KEY:-$(openssl rand -hex 16 2>/dev/null || echo 'hermes-'$(date +%s)_$$_$RANDOM)}"
+API_SERVER_KEY="${API_SERVER_KEY:-hermes-space-key-2026}"
 export API_SERVER_KEY="$API_SERVER_KEY"
-echo "[auth] API Server key: ${API_SERVER_KEY:0:8}..."
+echo "[auth] API Server key definida"
 
 # ── Start Gateway ──────────────────────────────────────────────
 echo "=== Iniciando Hermes Gateway na porta ${API_SERVER_PORT} ==="
