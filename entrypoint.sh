@@ -93,7 +93,7 @@ export API_SERVER_PORT=${PORT:-7860}
 
 API_SERVER_KEY="${API_SERVER_KEY:-hermes-space-key-2026}"
 export API_SERVER_KEY="$API_SERVER_KEY"
-echo "[auth] API Server key definida"
+echo "[auth] API Server key pronta"
 
 # ── Start Gateway ──────────────────────────────────────────────
 echo "=== Iniciando Hermes Gateway na porta ${API_SERVER_PORT} ==="
@@ -119,7 +119,7 @@ fi
 # ── Telegram Poller (standalone with auto-restart) ──────────────
 # Runs in a while-loop so it auto-restarts if it crashes.
 POLLER_LOG="$HERMES_HOME/logs/telegram_poller.log"
-export HERMES_API_URL="https://heltonhb-hermes-operator.hf.space"
+export HERMES_API_URL="http://127.0.0.1:${API_SERVER_PORT}"
 export HERMES_API_KEY="${API_SERVER_KEY}"
 
 echo "[telegram] Iniciando poller com auto-restart (logs visiveis no HF stdout)..."
