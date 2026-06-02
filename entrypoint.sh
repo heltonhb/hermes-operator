@@ -63,6 +63,8 @@ providers:
     models:
     - deepseek/deepseek-chat
     - deepseek/deepseek-r1
+    - deepseek/deepseek-v4-flash
+    - deepseek/deepseek-v4-pro
     - anthropic/claude-sonnet-4
     api_mode: chat_completions
 
