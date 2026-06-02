@@ -120,12 +120,13 @@ POLLER_LOG="$HERMES_HOME/logs/telegram_poller.log"
 export HERMES_API_URL="http://127.0.0.1:${API_SERVER_PORT}"
 export HERMES_API_KEY="${API_SERVER_KEY}"
 
-echo "[telegram] Iniciando poller com auto-restart..."
+echo "[telegram] Iniciando poller com auto-restart (logs visiveis no HF stdout)..."
 poll_with_restart() {
     while true; do
-        python3 /app/telegram_poller.py >> "$POLLER_LOG" 2>&1
-        local EXIT_CODE=$?
-        echo "[telegram] Poller saiu (codigo ${EXIT_CODE}), reiniciando em 3s..."
+        python3 /app/telegram_poller.py 2>&1 | tee -a "$POLLER_LOG"
+        # PEPESTATUS[0] = exit code of python3, not of tee
+        local EC=${PIPESTATUS[0]}
+        echo "[telegram] Poller saiu (codigo ${EC}), reiniciando em 3s..."
         sleep 3
     done
 }
@@ -179,5 +180,30 @@ else
 fi
 
 echo "=== Hermes Operator pronto ==="
+
+# ── Periodic health check ────────────────────────────────────
+# Shows poller log tail + timestamps every 60s on stdout
+health_loop() {
+    while true; do
+        sleep 60
+        echo "--- $(date +%H:%M:%S) health ---"
+        if kill -0 $POLLER_PID 2>/dev/null; then
+            echo "[poller] PID ${POLLER_PID}: alive"
+        else
+            echo "[poller] PID ${POLLER_PID}: DEAD"
+        fi
+        local LOG_LINES=$(tail -c 2000 "$POLLER_LOG" 2>/dev/null | wc -l)
+        if [ "$LOG_LINES" -gt 0 ]; then
+            echo "[poller] Last ${LOG_LINES} lines of log:"
+            tail -5 "$POLLER_LOG" 2>/dev/null | sed 's/^/  | /'
+        else
+            echo "[poller] Log vazio ou inacessivel"
+        fi
+    done
+}
+health_loop &
+HEALTH_PID=$!
+
 wait $GATEWAY_PID
 echo "[gateway] Processo encerrado"
+kill $HEALTH_PID 2>/dev/null || true
