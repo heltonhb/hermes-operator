@@ -180,10 +180,12 @@ def handle_update(update):
             })
             return
         elif text == "/ping":
-            tg_api("sendMessage", {
-                "chat_id": chat_id,
-                "text": "Pong! Bridge local"
-            })
+            import subprocess as _sp
+            _sp.run(["curl", "-s", "-X", "POST",
+                "https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/sendMessage",
+                "--data-urlencode", "chat_id=" + str(chat_id),
+                "--data-urlencode", "text=Pong! Bridge local (curl)"],
+                capture_output=True, timeout=15)
             return
 
     log.info(f"From @{username} (chat {chat_id}): {text[:60]}...")
