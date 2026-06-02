@@ -10,18 +10,15 @@ fi
 
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
-if [ -n "$OPENCODE_ZEN_API_KEY" ]; then
-    HERMES_PROVIDER="${HERMES_PROVIDER:-opencode-zen}"
-    HERMES_MODEL="${HERMES_MODEL:-deepseek-v4-flash-free}"
-    echo "[opencode-zen] API key encontrada OK — usando ${HERMES_MODEL}"
-elif [ -n "$GROQ_API_KEY" ]; then
+# Priority: groq > openrouter (opencode-zen has connectivity issues from HF Space)
+if [ -n "$GROQ_API_KEY" ]; then
     HERMES_PROVIDER="${HERMES_PROVIDER:-groq}"
     HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
-    echo "[groq] API key encontrada OK"
-else
+    echo "[groq] API key encontrada OK — usando ${HERMES_MODEL}"
+elif [ -n "$OPENROUTER_API_KEY" ]; then
     HERMES_PROVIDER="${HERMES_PROVIDER:-openrouter}"
-    HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-chat}"
-    echo "[openrouter] Usando fallback"
+    HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash}"
+    echo "[openrouter] Usando deepseek/deepseek-v4-flash"
 fi
 
 # ── Telegram token (baked into image, hex-encoded) ──────────────
