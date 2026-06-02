@@ -3,7 +3,7 @@ set -e
 
 echo "=== Hermes Operator — Starting ==="
 
-if [ -z "$GROQ_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ] && [ -z "$OPENCODE_ZEN_API_KEY" ]; then
+if [ -z "$GROQ_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ]; then
     echo "ERRO: Nenhuma API key configurada!"
     exit 1
 fi
