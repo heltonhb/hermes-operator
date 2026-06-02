@@ -182,8 +182,7 @@ def handle_update(update):
         elif text == "/ping":
             tg_api("sendMessage", {
                 "chat_id": chat_id,
-                "text": "Pong! 🏓\n\nBridge local → Space API ativo.",
-                "parse_mode": "Markdown"
+                "text": "Pong! Bridge local"
             })
             return
 
