@@ -86,7 +86,8 @@ platform_toolsets:
   api_server:
     auth:
       api_key: ${API_SERVER_KEY}
-    - web
+    allowed_tools:
+      - web
 CONFEOF
 
 export API_SERVER_ENABLED=true
