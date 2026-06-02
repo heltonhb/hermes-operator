@@ -122,6 +122,34 @@ POLLER_LOG="$HERMES_HOME/logs/telegram_poller.log"
 export HERMES_API_URL="http://127.0.0.1:${API_SERVER_PORT}"
 export HERMES_API_KEY="${API_SERVER_KEY}"
 
+echo "[telegram] Diagnostic salvando em /tmp/tg_diag.txt..."
+python3 << 'PYEOF' > /tmp/tg_diag.txt 2>&1
+import requests, json, time, socket
+import os
+diag = {}
+try:
+    r = requests.get('https://api.telegram.org', timeout=10)
+    diag["telegram_root"] = r.status_code
+except Exception as e:
+    diag["telegram_root"] = f"FAIL: {e}"
+try:
+    ip = socket.gethostbyname('api.telegram.org')
+    diag["dns"] = ip
+except Exception as e:
+    diag["dns"] = f"FAIL: {e}"
+try:
+    r = requests.get('https://api.telegram.org/botTEST/getMe', timeout=10)
+    diag["tg_with_bad_token"] = r.status_code
+except Exception as e:
+    diag["tg_with_bad_token"] = f"FAIL: {e}"
+diag["token_env"] = "present" if os.environ.get("TELEGRAM_BOT_TOKEN") else "MISSING"
+diag["token_len"] = len(os.environ.get("TELEGRAM_BOT_TOKEN", ""))
+with open("/tmp/tg_diag.txt", "w") as f:
+    json.dump(diag, f)
+print(json.dumps(diag))
+PYEOF
+cat /tmp/tg_diag.txt 2>/dev/null || echo "(diag file not created)"
+
 echo "[telegram] Iniciando poller com auto-restart (logs visiveis no HF stdout)..."
 poll_with_restart() {
     while true; do
