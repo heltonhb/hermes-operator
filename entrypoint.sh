@@ -82,6 +82,8 @@ display:
   show_cost: false
 platform_toolsets:
   api_server:
+    auth:
+      api_key: ${API_SERVER_KEY}
     - web
 CONFEOF
 
@@ -89,10 +91,11 @@ export API_SERVER_ENABLED=true
 export API_SERVER_HOST=0.0.0.0
 export API_SERVER_PORT=${PORT:-7860}
 
-if [ -n "$API_SERVER_KEY" ]; then
-    export API_SERVER_KEY="$API_SERVER_KEY"
-    echo "[auth] API Server com chave"
+if [ -z "$API_SERVER_KEY" ]; then
+    API_SERVER_KEY=$(openssl rand -hex 16)
+    echo "[auth] API Server key gerada automaticamente"
 fi
+export API_SERVER_KEY="$API_SERVER_KEY"
 
 # ── Start Gateway ──────────────────────────────────────────────
 echo "=== Iniciando Hermes Gateway na porta ${API_SERVER_PORT} ==="
