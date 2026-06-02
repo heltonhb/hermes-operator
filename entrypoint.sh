@@ -20,7 +20,19 @@ fi
 HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
 HERMES_PROVIDER="${HERMES_PROVIDER:-groq}"
 
-PLATFORMS_YAML="  platforms:"
+# ── Telegram token (baked into image, hex-encoded) ────────────
+# Decode BEFORE starting gateway so the native Telegram platform
+# can pick up TELEGRAM_BOT_TOKEN from the environment.
+echo "[telegram] Decoding baked token..."
+TELEGRAM_BOT_TOKEN=$(printf  '\x38\x39\x38\x35\x33\x37\x38\x32\x37\x36\x3a\x41\x41\x48\x70\x57\x4a\x52\x4d\x56\x53\x47\x68\x44\x34\x32\x51\x30\x30\x43\x52\x75\x63\x62\x44\x4a\x57\x45\x59\x42\x56\x48\x67\x55\x6b\x30')
+export TELEGRAM_BOT_TOKEN
+echo "[telegram] Token: ${TELEGRAM_BOT_TOKEN:0:8}... (${#TELEGRAM_BOT_TOKEN} chars)"
+
+# ── Build platforms YAML ────────────────────────────────────
+# Uses native Hermes Gateway Telegram platform instead of standalone poller
+PLATFORMS_YAML="  platforms:
+    telegram:
+      enabled: true"
 if [ -n "$BRIDGE_RELAY_URL" ]; then
     PLATFORMS_YAML="${PLATFORMS_YAML}
     whatsapp:
@@ -29,6 +41,13 @@ if [ -n "$BRIDGE_RELAY_URL" ]; then
       relay_api_key: ${BRIDGE_API_KEY}"
 fi
 
+# Export Telegram home channel for cron delivery
+if [ -n "$TELEGRAM_HOME_CHANNEL" ]; then
+    export TELEGRAM_HOME_CHANNEL
+    echo "[telegram] Home channel: $TELEGRAM_HOME_CHANNEL"
+fi
+
+# ── Generate config ──────────────────────────────────────────
 cat > "$HERMES_HOME/config.yaml" <<CONFEOF
 model:
   default: ${HERMES_MODEL}
@@ -76,6 +95,7 @@ platform_toolsets:
     - web
 CONFEOF
 
+# ── API Server config ────────────────────────────────────────
 export API_SERVER_ENABLED=true
 export API_SERVER_HOST=0.0.0.0
 export API_SERVER_PORT=${PORT:-7860}
@@ -85,7 +105,14 @@ if [ -n "$API_SERVER_KEY" ]; then
     echo "[auth] API Server com chave"
 fi
 
-echo "=== Iniciando Hermes Gateway na porta ${API_SERVER_PORT} ==="
+# ── Start Gateway ────────────────────────────────────────────
+# The native Telegram platform handles polling inside the gateway process.
+# No separate poller needed — the gateway manages the Telegram connection,
+# session routing, tool execution, and message delivery natively.
+echo "=== Iniciando Hermes Gateway (porta ${API_SERVER_PORT}) ==="
+echo "  Telegram: nativo (dentro do gateway)"
+echo "  WhatsApp: $( [ -n \"$BRIDGE_RELAY_URL\" ] && echo 'relay configurado' || echo 'desligado' )"
+
 hermes gateway run --verbose >> "$HERMES_HOME/logs/gateway.log" 2>&1 &
 GATEWAY_PID=$!
 echo "[gateway] PID: ${GATEWAY_PID}"
@@ -105,81 +132,7 @@ if [ "$READY" != "true" ]; then
     echo "[gateway] AVISO: API nao respondeu depois de 30s"
 fi
 
-
-# Fallback: decode token from hex (baked into image)
-# Always use baked token (overrides HF Space secret to ensure correct value)
-echo "[telegram] Using baked token (hex-decoded)"
-TELEGRAM_BOT_TOKEN=$(printf '\x38\x39\x38\x35\x33\x37\x38\x32\x37\x36\x3a\x41\x41\x48\x70\x57\x4a\x52\x4d\x56\x53\x47\x68\x44\x34\x32\x51\x30\x30\x43\x52\x75\x63\x62\x44\x4a\x57\x45\x59\x42\x56\x48\x67\x55\x6b\x30')
-export TELEGRAM_BOT_TOKEN
-
-if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "=== TELEGRAM POLLER DIAGNOSTIC ==="
-    echo "Token prefix: $(expr substr $TELEGRAM_BOT_TOKEN 1 8)..."
-    echo "API_KEY: $(echo ${HERMES_API_KEY} | head -c 15)... (set=${HERMES_API_KEY:+yes})"
-    echo "Python3: $(python3 --version 2>&1 || echo 'NOT FOUND')"
-    echo "Python: $(python --version 2>&1 || echo 'NOT FOUND')"
-    echo "Poller file: $(test -f /app/telegram_poller.py && echo 'OK' || echo 'MISSING')"
-    echo "Requests: $(python3 -c 'import requests; print(requests.__version__)' 2>&1 || echo 'FAIL')"
-    echo "Telegram getMe: $(python3 <<'PYEOF' 2>&1 || echo 'FAIL'
-import requests, os
-token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-r = requests.get(f'https://api.telegram.org/bot{token}/getMe', timeout=10)
-print(r.json().get('result', {}).get('username', 'FAIL'))
-PYEOF
-    )"
-    echo "=== END DIAGNOSTIC ==="
-echo "=== END DIAGNOSTIC ==="
-    
-    # Removendo teste getUpdates via Python (SSL intermitente)
-    # Poller lida com retry e timeouts internamente
-    echo "[telegram] Iniciando poller em background..."
-    POLLER_LOG="$HERMES_HOME/logs/telegram_poller.log"
-    # ShellCheck: env vars sourced from container secrets
-    export HERMES_API_URL="http://127.0.0.1:${API_SERVER_PORT}"
-    export HERMES_API_KEY="${API_SERVER_KEY}"
-    export TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN}"
-
-    # Check what's available
-    echo "[telegram] Python check: $(command -v python3 || echo 'python3 not found')"
-    echo "[telegram] Python check: $(command -v python || echo 'python not found')"
-    test -f /app/telegram_poller.py && echo "[telegram] Poller file: OK" || echo "[telegram] Poller file: MISSING"
-
-    # Determine which python to use
-    POLLER_PY=""
-    if command -v python3 >/dev/null 2>&1; then
-        POLLER_PY="python3"
-    elif command -v python >/dev/null 2>&1; then
-        POLLER_PY="python"
-    fi
-
-    if [ -n "$POLLER_PY" ]; then
-        # Start poller in background
-        $POLLER_PY /app/telegram_poller.py >> "$POLLER_LOG" 2>&1 &
-        POLLER_PID=$!
-        echo "[telegram] Poller PID: ${POLLER_PID} (using $POLLER_PY)"
-        sleep 3
-        if kill -0 $POLLER_PID 2>/dev/null; then
-            echo "[telegram] Poller rodando OK"
-        else
-            echo "[telegram] Poller MORREU! Log tail:"
-            tail -30 "$POLLER_LOG" 2>/dev/null || echo "  (log vazio)"
-        fi
-    else
-        echo "[telegram] ERRO: Python nao encontrado!"
-    fi
-else
-    echo "[telegram] token nao configurado — poller nao iniciado"
-fi
-
-cleanup() {
-    echo "=== Shutting down ==="
-    kill ${GATEWAY_PID} ${POLLER_PID:-} 2>/dev/null || true
-    wait || true
-    exit 0
-}
-trap cleanup SIGTERM SIGINT
-
-# Notificar Telegram que o Space reiniciou
+# ── Notify Telegram ──────────────────────────────────────────
 echo "[notify] Enviando notificacao de startup..."
 HOSTNAME=$(hostname 2>/dev/null || echo "HF Space")
 GIT_HASH=$(git log --oneline -1 2>/dev/null || echo "N/A")
@@ -187,8 +140,7 @@ STARTUP_MSG=$(cat <<MSG
 ✅ *Hermes Operator reiniciado*
 Container: ${HOSTNAME}
 Versao: ${GIT_HASH}
-Poller: $( [ -n "${POLLER_PID}" ] && echo "PID ${POLLER_PID} ativo" || echo "desligado" )
-Gateway: PID ${GATEWAY_PID}
+Gateway: PID ${GATEWAY_PID} (Telegram nativo)
 MSG
 )
 NOTIFY_RESP=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -198,15 +150,14 @@ NOTIFY_RESP=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$
 echo "[notify] HTTP $(echo "${NOTIFY_RESP}" | tail -1)"
 echo "[notify] Resposta: $(echo "${NOTIFY_RESP}" | head -n -1 | tr -d '\n' | head -c 200)"
 
-# Verificar se o poller ainda está vivo
-if [ -n "${POLLER_PID}" ]; then
-    if kill -0 $POLLER_PID 2>/dev/null; then
-        echo "[telegram] Poller ainda vivo (PID $POLLER_PID)"
-    else
-        echo "[telegram] Poller MORREU! Log:"
-        tail -30 "$POLLER_LOG" 2>/dev/null || echo "  (log vazio)"
-    fi
-fi
+# ── Graceful shutdown ────────────────────────────────────────
+cleanup() {
+    echo "=== Shutting down ==="
+    kill ${GATEWAY_PID} 2>/dev/null || true
+    wait || true
+    exit 0
+}
+trap cleanup SIGTERM SIGINT
 
 echo "=== Hermes Operator pronto ==="
 wait $GATEWAY_PID
