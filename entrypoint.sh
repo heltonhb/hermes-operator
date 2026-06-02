@@ -3,22 +3,26 @@ set -e
 
 echo "=== Hermes Operator — Starting ==="
 
-if [ -z "$GROQ_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ]; then
+if [ -z "$GROQ_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ] && [ -z "$OPENCODE_ZEN_API_KEY" ]; then
     echo "ERRO: Nenhuma API key configurada!"
     exit 1
 fi
 
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
-if [ -n "$GROQ_API_KEY" ]; then
+if [ -n "$OPENCODE_ZEN_API_KEY" ]; then
+    HERMES_PROVIDER="${HERMES_PROVIDER:-opencode-zen}"
+    HERMES_MODEL="${HERMES_MODEL:-deepseek-v4-flash-free}"
+    echo "[opencode-zen] API key encontrada OK — usando ${HERMES_MODEL}"
+elif [ -n "$GROQ_API_KEY" ]; then
+    HERMES_PROVIDER="${HERMES_PROVIDER:-groq}"
+    HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
     echo "[groq] API key encontrada OK"
 else
     HERMES_PROVIDER="${HERMES_PROVIDER:-openrouter}"
     HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-chat}"
+    echo "[openrouter] Usando fallback"
 fi
-
-HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
-HERMES_PROVIDER="${HERMES_PROVIDER:-groq}"
 
 # ── Telegram token (baked into image, hex-encoded) ──────────────
 echo "[telegram] Decoding baked token..."

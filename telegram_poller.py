@@ -119,7 +119,7 @@ def hermes_chat(chat_id, text, user_id, username):
         r = requests.post(
             f"{HERMES_API}/v1/chat/completions",
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": "deepseek-v4-flash-free",
                 "messages": messages,
                 "max_tokens": 1024,
                 "user": f"telegram:{chat_id}:{username}"
