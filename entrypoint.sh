@@ -180,6 +180,13 @@ echo "[notify] Resposta: $(echo "${NOTIFY_RESP}" | head -n -1 | tr -d '\n' | hea
 sleep 5
 if kill -0 $PROXY_PID 2>/dev/null; then
     echo "[proxy] Proxy ainda vivo (PID $PROXY_PID)"
+    # Set the webhook URL on Telegram
+    HOST_DOMAIN="${SPACE_HOST:-heltonhb-hermes-operator.hf.space}"
+    WEBHOOK_URL="https://${HOST_DOMAIN}/telegram/webhook"
+    echo "[webhook] Registrando webhook no Telegram: ${WEBHOOK_URL}..."
+    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+        -d "url=${WEBHOOK_URL}" \
+        -d "allowed_updates=[\"message\",\"edited_message\",\"callback_query\"]"
 else
     echo "[proxy] Proxy MORREU! Log:"
     tail -30 "$PROXY_LOG" 2>/dev/null || echo "  (log vazio)"
