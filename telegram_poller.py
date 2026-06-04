@@ -122,7 +122,7 @@ def hermes_chat(chat_id, text, user_id, username):
                 "model": "llama-3.3-70b-versatile",
                 "messages": messages,
                 "max_tokens": 1024,
-                "user": f"telegram:{chat_id}:{username}"
+                "user": f"tg_{chat_id}"
             },
             headers=headers,
             timeout=60

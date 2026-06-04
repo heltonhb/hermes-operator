@@ -57,7 +57,7 @@ async def call_hermes_chat(chat_id, text, username):
             {"role": "user", "content": text}
         ],
         "max_tokens": 1024,
-        "user": f"telegram:{chat_id}:{username}"
+        "user": f"tg_{chat_id}"
     }
 
     async with aiohttp.ClientSession() as session:
