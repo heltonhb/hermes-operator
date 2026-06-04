@@ -93,7 +93,8 @@ CONFEOF
 
 export API_SERVER_ENABLED=true
 export API_SERVER_HOST=0.0.0.0
-export API_SERVER_PORT=${PORT:-7860}
+# The gateway API server will listen internally on 7861
+export API_SERVER_PORT=7861
 
 API_SERVER_KEY="${API_SERVER_KEY:-hermes-space-key-2026}"
 export API_SERVER_KEY="$API_SERVER_KEY"
@@ -120,66 +121,37 @@ if [ "$READY" != "true" ]; then
     echo "[gateway] AVISO: API nao respondeu depois de 30s"
 fi
 
-# ── Telegram Poller (standalone with auto-restart) ──────────────
-# Runs in a while-loop so it auto-restarts if it crashes.
-POLLER_LOG="$HERMES_HOME/logs/telegram_poller.log"
-export HERMES_API_URL="http://127.0.0.1:${API_SERVER_PORT}"
+# ── Start Webhook Proxy ──────────────────────────────────────────
+# Starts proxy.py on port 7860 (which is the port HF Spaces exposes)
+PROXY_LOG="$HERMES_HOME/logs/proxy.log"
+export HERMES_API_URL="http://127.0.0.1:7861"
 export HERMES_API_KEY="${API_SERVER_KEY}"
 
-echo "[telegram] Diagnostic salvando em /tmp/tg_diag.txt..."
-python3 << 'PYEOF' > /tmp/tg_diag.txt 2>&1
-import requests, json, time, socket
-import os
-diag = {}
-try:
-    r = requests.get('https://api.telegram.org', timeout=10)
-    diag["telegram_root"] = r.status_code
-except Exception as e:
-    diag["telegram_root"] = f"FAIL: {e}"
-try:
-    ip = socket.gethostbyname('api.telegram.org')
-    diag["dns"] = ip
-except Exception as e:
-    diag["dns"] = f"FAIL: {e}"
-try:
-    r = requests.get('https://api.telegram.org/botTEST/getMe', timeout=10)
-    diag["tg_with_bad_token"] = r.status_code
-except Exception as e:
-    diag["tg_with_bad_token"] = f"FAIL: {e}"
-diag["token_env"] = "present" if os.environ.get("TELEGRAM_BOT_TOKEN") else "MISSING"
-diag["token_len"] = len(os.environ.get("TELEGRAM_BOT_TOKEN", ""))
-with open("/tmp/tg_diag.txt", "w") as f:
-    json.dump(diag, f)
-print(json.dumps(diag))
-PYEOF
-cat /tmp/tg_diag.txt 2>/dev/null || echo "(diag file not created)"
-
-echo "[telegram] Iniciando poller com auto-restart (logs visiveis no HF stdout)..."
-poll_with_restart() {
+echo "[proxy] Iniciando proxy webhook na porta ${PORT:-7860} (logs em $PROXY_LOG)..."
+proxy_with_restart() {
     while true; do
-        python3 /app/telegram_poller.py 2>&1 | tee -a "$POLLER_LOG"
-        # PEPESTATUS[0] = exit code of python3, not of tee
+        python3 /app/proxy.py 2>&1 | tee -a "$PROXY_LOG"
         local EC=${PIPESTATUS[0]}
-        echo "[telegram] Poller saiu (codigo ${EC}), reiniciando em 3s..."
+        echo "[proxy] Proxy saiu (codigo ${EC}), reiniciando em 3s..."
         sleep 3
     done
 }
-poll_with_restart &
-POLLER_PID=$!
-echo "[telegram] Poller PID: ${POLLER_PID} (auto-restart ativo)"
+proxy_with_restart &
+PROXY_PID=$!
+echo "[proxy] Proxy PID: ${PROXY_PID} (auto-restart ativo)"
 
 sleep 3
-if kill -0 $POLLER_PID 2>/dev/null; then
-    echo "[telegram] Poller rodando OK"
+if kill -0 $PROXY_PID 2>/dev/null; then
+    echo "[proxy] Proxy rodando OK"
 else
-    echo "[telegram] AVISO: Poller parece ter parado. Log tail:"
-    tail -5 "$POLLER_LOG" 2>/dev/null || echo "  (log vazio)"
+    echo "[proxy] AVISO: Proxy parece ter parado. Log tail:"
+    tail -5 "$PROXY_LOG" 2>/dev/null || echo "  (log vazio)"
 fi
 
 # ── Graceful shutdown ──────────────────────────────────────────
 cleanup() {
     echo "=== Shutting down ==="
-    kill ${GATEWAY_PID} ${POLLER_PID:-} 2>/dev/null || true
+    kill ${GATEWAY_PID} ${PROXY_PID:-} 2>/dev/null || true
     wait || true
     exit 0
 }
@@ -190,11 +162,11 @@ echo "[notify] Enviando notificacao de startup..."
 HOSTNAME=$(hostname 2>/dev/null || echo "HF Space")
 GIT_HASH=$(git log --oneline -1 2>/dev/null || echo "N/A")
 STARTUP_MSG=$(cat <<MSG
-✅ *Hermes Operator reiniciado*
+✅ *Hermes Operator reiniciado (Webhook)*
 Container: ${HOSTNAME}
 Versao: ${GIT_HASH}
-Gateway: PID ${GATEWAY_PID}
-Poller: PID ${POLLER_PID} (auto-restart)
+Gateway: PID ${GATEWAY_PID} (porta 7861)
+Proxy: PID ${PROXY_PID} (porta ${PORT:-7860})
 MSG
 )
 NOTIFY_RESP=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -204,34 +176,34 @@ NOTIFY_RESP=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$
 echo "[notify] HTTP $(echo "${NOTIFY_RESP}" | tail -1)"
 echo "[notify] Resposta: $(echo "${NOTIFY_RESP}" | head -n -1 | tr -d '\n' | head -c 200)"
 
-# ── Verify poller still alive ─────────────────────────────────
+# ── Verify proxy still alive ─────────────────────────────────
 sleep 5
-if kill -0 $POLLER_PID 2>/dev/null; then
-    echo "[telegram] Poller ainda vivo (PID $POLLER_PID)"
+if kill -0 $PROXY_PID 2>/dev/null; then
+    echo "[proxy] Proxy ainda vivo (PID $PROXY_PID)"
 else
-    echo "[telegram] Poller MORREU! Log:"
-    tail -30 "$POLLER_LOG" 2>/dev/null || echo "  (log vazio)"
+    echo "[proxy] Proxy MORREU! Log:"
+    tail -30 "$PROXY_LOG" 2>/dev/null || echo "  (log vazio)"
 fi
 
 echo "=== Hermes Operator pronto ==="
 
 # ── Periodic health check ────────────────────────────────────
-# Shows poller log tail + timestamps every 60s on stdout
+# Shows proxy log tail + timestamps every 60s on stdout
 health_loop() {
     while true; do
         sleep 60
         echo "--- $(date +%H:%M:%S) health ---"
-        if kill -0 $POLLER_PID 2>/dev/null; then
-            echo "[poller] PID ${POLLER_PID}: alive"
+        if kill -0 $PROXY_PID 2>/dev/null; then
+            echo "[proxy] PID ${PROXY_PID}: alive"
         else
-            echo "[poller] PID ${POLLER_PID}: DEAD"
+            echo "[proxy] Proxy status: DEAD"
         fi
-        local LOG_LINES=$(tail -c 2000 "$POLLER_LOG" 2>/dev/null | wc -l)
+        local LOG_LINES=$(tail -c 2000 "$PROXY_LOG" 2>/dev/null | wc -l)
         if [ "$LOG_LINES" -gt 0 ]; then
-            echo "[poller] Last ${LOG_LINES} lines of log:"
-            tail -5 "$POLLER_LOG" 2>/dev/null | sed 's/^/  | /'
+            echo "[proxy] Last ${LOG_LINES} lines of log:"
+            tail -5 "$PROXY_LOG" 2>/dev/null | sed 's/^/  | /'
         else
-            echo "[poller] Log vazio ou inacessivel"
+            echo "[proxy] Log vazio ou inacessivel"
         fi
     done
 }

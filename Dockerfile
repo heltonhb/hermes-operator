@@ -19,6 +19,7 @@ RUN mkdir -p $HERMES_HOME/logs $HERMES_HOME/sessions
 COPY entrypoint.sh /app/entrypoint.sh
 COPY config.yaml /app/config.yaml
 COPY telegram_poller.py /app/telegram_poller.py
+COPY proxy.py /app/proxy.py
 RUN chmod +x /app/entrypoint.sh
 
 # Porta do HF Spaces
