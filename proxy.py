@@ -130,8 +130,20 @@ async def proxy_handler(request):
             log.error(f"Proxy error for {method} {path}: {e}")
             return web.Response(text="Gateway Error", status=502)
 
+async def get_logs_handler(request):
+    log_path = "/root/.hermes/logs/proxy.log"
+    if os.path.exists(log_path):
+        try:
+            with open(log_path, "r") as f:
+                content = f.read()[-10000:]
+                return web.Response(text=content)
+        except Exception as e:
+            return web.Response(text=f"Error reading log: {e}", status=500)
+    return web.Response(text="Log file not found", status=404)
+
 app = web.Application()
 app.router.add_post('/telegram/webhook', handle_telegram_webhook)
+app.router.add_get('/telegram/logs', get_logs_handler)
 app.router.add_route('*', '/{tail:.*}', proxy_handler)
 
 if __name__ == '__main__':
