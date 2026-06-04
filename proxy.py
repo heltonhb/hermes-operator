@@ -3,6 +3,7 @@ import aiohttp
 from aiohttp import web
 import json
 import logging
+import traceback
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("webhook-proxy")
@@ -95,7 +96,7 @@ async def send_telegram_message(chat_id, text):
                     if not res.get("ok"):
                         log.error(f"Failed to send telegram message chunk: {res}")
             except Exception as e:
-                log.error(f"Error sending telegram message: {e}")
+                log.error(f"Error sending telegram message: {e}\n{traceback.format_exc()}")
 
 async def send_telegram_action(chat_id, action):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendChatAction"
@@ -141,9 +142,21 @@ async def get_logs_handler(request):
             return web.Response(text=f"Error reading log: {e}", status=500)
     return web.Response(text="Log file not found", status=404)
 
+async def get_gateway_logs_handler(request):
+    log_path = "/root/.hermes/logs/gateway.log"
+    if os.path.exists(log_path):
+        try:
+            with open(log_path, "r") as f:
+                content = f.read()[-10000:]
+                return web.Response(text=content)
+        except Exception as e:
+            return web.Response(text=f"Error reading log: {e}", status=500)
+    return web.Response(text="Log file not found", status=404)
+
 app = web.Application()
 app.router.add_post('/telegram/webhook', handle_telegram_webhook)
 app.router.add_get('/telegram/logs', get_logs_handler)
+app.router.add_get('/telegram/gateway_logs', get_gateway_logs_handler)
 app.router.add_route('*', '/{tail:.*}', proxy_handler)
 
 if __name__ == '__main__':
