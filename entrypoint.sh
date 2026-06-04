@@ -3,18 +3,22 @@ set -e
 
 echo "=== Hermes Operator — Starting ==="
 
-if [ -z "$GROQ_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ]; then
+if [ -z "$GROQ_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ] && [ -z "$OPENCODE_ZEN_API_KEY" ] && [ -z "$OPENCODE_API_KEY" ]; then
     echo "ERRO: Nenhuma API key configurada!"
     exit 1
 fi
 
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
-# Priority: groq > openrouter (opencode-zen has connectivity issues from HF Space)
+# Priority: groq > opencode > openrouter
 if [ -n "$GROQ_API_KEY" ]; then
     HERMES_PROVIDER="${HERMES_PROVIDER:-groq}"
     HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
     echo "[groq] API key encontrada OK — usando ${HERMES_MODEL}"
+elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
+    HERMES_PROVIDER="${HERMES_PROVIDER:-opencode}"
+    HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash:free}"
+    echo "[opencode] API key encontrada OK — usando ${HERMES_MODEL}"
 elif [ -n "$OPENROUTER_API_KEY" ]; then
     HERMES_PROVIDER="${HERMES_PROVIDER:-openrouter}"
     HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash}"

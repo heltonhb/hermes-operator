@@ -9,6 +9,14 @@ model:
 
 # ── Providers ─────────────────────────────────────────────────
 providers:
+  opencode:
+    name: OpenCode Zen
+    api: https://opencode.ai/zen/go/v1
+    key_env: OPENCODE_ZEN_API_KEY
+    default_model: deepseek/deepseek-v4-flash:free
+    models:
+    - deepseek/deepseek-v4-flash:free
+    api_mode: chat_completions
   groq:
     name: Groq (Free)
     key_env: GROQ_API_KEY
