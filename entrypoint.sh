@@ -40,12 +40,19 @@ elif [ -n "$OPENROUTER_API_KEY" ]; then
     echo "[openrouter] Usando deepseek/deepseek-v4-flash"
 fi
 
-# ── Telegram token (from environment) ──────────────
+# ── Telegram token (from environment or local file) ─
 echo "[telegram] Checking for TELEGRAM_BOT_TOKEN in environment..."
 if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "[telegram] AVISO: TELEGRAM_BOT_TOKEN não está definido! Funcionalidades do Telegram estarão desativadas."
+    # Fallback: try to read from local file
+    if [ -f /app/telegram_token.txt ]; then
+        TELEGRAM_BOT_TOKEN=$(cat /app/telegram_token.txt)
+        export TELEGRAM_BOT_TOKEN
+        echo "[telegram] Token carregado de telegram_token.txt: ${TELEGRAM_BOT_TOKEN:0:8}... (${#TELEGRAM_BOT_TOKEN} chars)"
+    else
+        echo "[telegram] AVISO: TELEGRAM_BOT_TOKEN não está definido! Telegram não responderá mensagens."
+    fi
 else
-    echo "[telegram] Token encontrado: ${TELEGRAM_BOT_TOKEN:0:8}... (${#TELEGRAM_BOT_TOKEN} chars)"
+    echo "[telegram] Token encontrado no ambiente: ${TELEGRAM_BOT_TOKEN:0:8}... (${#TELEGRAM_BOT_TOKEN} chars)"
 fi
 
 # ── Build platforms YAML ────────────────────────────────────────
