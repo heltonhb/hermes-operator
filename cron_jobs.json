@@ -1,0 +1,51 @@
+{
+  "jobs": [
+    {
+      "id": "3db6ea02dc8d",
+      "name": "Resumo Diário Copa do Mundo 2026",
+      "prompt": "Faça um resumo matinal das PRINCIPAIS notícias da Copa do Mundo 2026 (sede: EUA, Canadá, México). Siga este formato:\n\n1. **📅 Jogos de Hoje** — agenda de jogos do dia (se houver), com horários no fuso -03 (Brasília)\n2. **🔥 Destaques** — 3-5 notícias mais importantes (lesões, convocações, resultados, polêmicas, preparação das seleções, etc.)\n3. **🇧🇷 Brasil** — foco especial na seleção brasileira: convocados, preparação, notícias\n4. **📊 Tabela/Grupos** — situação dos grupos se a Copa já tiver começado\n\nUse web_search para buscar as notícias mais recentes. Busque em português e inglês. Fontes: globoesporte, ge.globo, ESPN Brasil, FIFA.com, BBC Sport.\n\nSeja objetivo e direto. No final, inclua uma seção \"⚽ Fique de Olho\" com algo pra acompanhar durante o dia.\n\nResponda EM PORTUGUÊS.",
+      "skills": [],
+      "skill": null,
+      "model": "llama-3.3-70b-versatile",
+      "provider": "groq",
+      "base_url": null,
+      "script": null,
+      "no_agent": false,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 7 * * *",
+        "display": "0 7 * * *"
+      },
+      "schedule_display": "0 7 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 3
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-05-30T22:31:45.508956-03:00",
+      "next_run_at": "2026-06-05T07:00:00-03:00",
+      "last_run_at": "2026-06-04T08:16:18.798216-03:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "local",
+      "origin": {
+        "platform": "telegram",
+        "chat_id": "1999968153",
+        "chat_name": "Helton Biscaro",
+        "thread_id": null
+      },
+      "enabled_toolsets": [
+        "web",
+        "search"
+      ],
+      "workdir": null,
+      "profile": null
+    }
+  ],
+  "updated_at": "2026-06-05T12:30:00-03:00"
+}
