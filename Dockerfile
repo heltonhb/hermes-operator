@@ -9,11 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     logrotate \
     && rm -rf /var/lib/apt/lists/*
 
-# Instala Hermes Agent com extras de messaging (Telegram, WhatsApp, etc.)
-RUN pip install --no-cache-dir "hermes-agent[all]"
-
-# Instala backend de busca DuckDuckGo (gratuito, sem API key)
-RUN pip install --no-cache-dir duckduckgo_search
+# Instala Hermes Agent com extras de messaging + DuckDuckGo search gratuito
+RUN pip install --no-cache-dir "hermes-agent[all]" duckduckgo_search
 
 # Cria diretório do Hermes
 ENV HERMES_HOME=/root/.hermes
