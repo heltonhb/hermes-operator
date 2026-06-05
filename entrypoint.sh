@@ -236,10 +236,14 @@ Gateway: PID ${GATEWAY_PID} (porta 7861)
 Proxy: PID ${PROXY_PID} (porta ${PORT:-7860})
 MSG
 )
-NOTIFY_RESP=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    --data-urlencode "chat_id=1999968153" \
-    --data-urlencode "parse_mode=Markdown" \
-    --data-urlencode "text=${STARTUP_MSG}" 2>&1 || true)
+if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+    NOTIFY_RESP=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+        --data-urlencode "chat_id=1999968153" \
+        --data-urlencode "parse_mode=Markdown" \
+        --data-urlencode "text=${STARTUP_MSG}" 2>&1 || true)
+else
+    NOTIFY_RESP="(skipped - no token)\n000"
+fi
 echo "[notify] HTTP $(echo "${NOTIFY_RESP}" | tail -1)"
 echo "[notify] Resposta: $(echo "${NOTIFY_RESP}" | head -n -1 | tr -d '\n' | head -c 200)"
 
@@ -255,9 +259,13 @@ if kill -0 $PROXY_PID 2>/dev/null; then
     fi
     WEBHOOK_URL="https://${HOST_DOMAIN}/telegram/webhook"
     echo "[webhook] Registrando webhook no Telegram: ${WEBHOOK_URL}..."
-    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
-        -d "url=${WEBHOOK_URL}" \
-        -d "allowed_updates=[\"message\",\"edited_message\",\"callback_query\"]"
+    if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+            -d "url=${WEBHOOK_URL}" \
+            -d "allowed_updates=[\"message\",\"edited_message\",\"callback_query\"]" || true
+    else
+        echo "[webhook] SKIP: token não disponível"
+    fi
 else
     echo "[proxy] Proxy MORREU! Log:"
     tail -30 "$PROXY_LOG" 2>/dev/null || echo "  (log vazio)"
