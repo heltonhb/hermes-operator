@@ -33,7 +33,8 @@ COPY config/logrotate.conf /etc/logrotate.d/hermes-operator
 ENV PORT=7860
 
 # Adiciona job de logrotate para execução diária
-RUN echo "0 0 * * * root /usr/sbin/logrotate /etc/logrotate.d/hermes-operator" > /etc/cron.d/hermes-operator-logrotate && \
+RUN mkdir -p /etc/cron.d && \
+    echo "0 0 * * * root /usr/sbin/logrotate /etc/logrotate.d/hermes-operator" > /etc/cron.d/hermes-operator-logrotate && \
     chmod 0644 /etc/cron.d/hermes-operator-logrotate
 
 CMD ["/app/entrypoint.sh"]
