@@ -4,6 +4,9 @@ from aiohttp import web
 import json
 import logging
 import traceback
+import asyncio
+import glob
+import time
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("webhook-proxy")
@@ -11,6 +14,7 @@ log = logging.getLogger("webhook-proxy")
 GATEWAY_URL = "http://127.0.0.1:7861"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 HERMES_API_KEY = os.environ.get("HERMES_API_KEY", "")
+DEFAULT_MODEL = os.environ.get("HERMES_MODEL", "llama-3.3-70b-versatile")
 
 async def handle_telegram_webhook(request):
     try:
@@ -47,12 +51,15 @@ async def handle_telegram_webhook(request):
         return web.Response(text="Internal Server Error", status=500)
 
 async def call_hermes_chat(chat_id, text, username):
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "X-Hermes-Session-Id": f"tg_{chat_id}"
+    }
     if HERMES_API_KEY:
         headers["Authorization"] = f"Bearer {HERMES_API_KEY}"
 
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": DEFAULT_MODEL,
         "messages": [
             {"role": "system", "content": "You are Hermes, an AI assistant. Respond in Portuguese (pt-BR). Keep responses helpful and concise."},
             {"role": "user", "content": text}
@@ -153,7 +160,86 @@ async def get_gateway_logs_handler(request):
             return web.Response(text=f"Error reading log: {e}", status=500)
     return web.Response(text="Log file not found", status=404)
 
+# ── Cron Outbox Monitoring ──────────────────────────────────
+CRON_OUTPUT_DIR = "/root/.hermes/cron/output"
+TRACKING_FILE = "/root/.hermes/telegram_sent_files.json"
+WATCHED_JOB_IDS = ["3db6ea02dc8d"]
+TARGET_CHAT_ID = 1999968153
+
+def load_sent_files():
+    if os.path.exists(TRACKING_FILE):
+        try:
+            with open(TRACKING_FILE) as f:
+                return set(json.load(f))
+        except Exception:
+            return set()
+    return set()
+
+def save_sent_files(sent_set):
+    try:
+        os.makedirs(os.path.dirname(TRACKING_FILE), exist_ok=True)
+        with open(TRACKING_FILE, "w") as f:
+            json.dump(list(sent_set), f)
+    except Exception as e:
+        log.error(f"Error saving tracking file: {e}")
+
+async def check_cron_outbox():
+    sent_files = load_sent_files()
+    new_sent = False
+
+    for job_id in WATCHED_JOB_IDS:
+        job_dir = os.path.join(CRON_OUTPUT_DIR, job_id)
+        if not os.path.isdir(job_dir):
+            continue
+
+        for fpath in sorted(glob.glob(os.path.join(job_dir, "*.md"))):
+            if fpath in sent_files:
+                continue
+            # Skip files older than 26 hours
+            try:
+                mtime = os.path.getmtime(fpath)
+                if (time.time() - mtime) > 60 * 60 * 26:
+                    continue
+                with open(fpath) as f:
+                    content = f.read().strip()
+                if not content:
+                    continue
+                log.info(f"Outbox: sending {os.path.basename(fpath)} to Telegram")
+                await send_telegram_message(TARGET_CHAT_ID, content)
+                sent_files.add(fpath)
+                new_sent = True
+                await asyncio.sleep(1)
+            except Exception as e:
+                log.error(f"Outbox error reading {fpath}: {e}")
+
+    if new_sent:
+        save_sent_files(sent_files)
+
+async def cron_checker_loop():
+    log.info("Starting background cron outbox checker loop...")
+    while True:
+        try:
+            await check_cron_outbox()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            log.error(f"Error in cron checker loop: {e}")
+        await asyncio.sleep(60)
+
+async def start_background_tasks(app):
+    app['cron_checker'] = asyncio.create_task(cron_checker_loop())
+
+async def cleanup_background_tasks(app):
+    app['cron_checker'].cancel()
+    try:
+        await app['cron_checker']
+    except asyncio.CancelledError:
+        pass
+
 app = web.Application()
+app.on_startup.append(start_background_tasks)
+app.on_cleanup.append(cleanup_background_tasks)
+
 app.router.add_post('/telegram/webhook', handle_telegram_webhook)
 app.router.add_get('/telegram/logs', get_logs_handler)
 app.router.add_get('/telegram/gateway_logs', get_gateway_logs_handler)

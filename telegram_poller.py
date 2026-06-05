@@ -111,7 +111,10 @@ def hermes_chat(chat_id, text, user_id, username):
         {"role": "user", "content": text}
     ]
 
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "X-Hermes-Session-Id": f"tg_{chat_id}"
+    }
     if HERMES_API_KEY:
         headers["Authorization"] = f"Bearer {HERMES_API_KEY}"
 

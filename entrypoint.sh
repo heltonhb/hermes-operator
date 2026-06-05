@@ -40,24 +40,29 @@ elif [ -n "$OPENROUTER_API_KEY" ]; then
     echo "[openrouter] Usando deepseek/deepseek-v4-flash"
 fi
 
-# ── Telegram token (from environment or local file) ─
+export HERMES_MODEL HERMES_PROVIDER
+
+# ── Telegram token ────────────────────────────────────────
+# IMPORTANTE: NÃO exportamos TELEGRAM_BOT_TOKEN globalmente.
+# O Hermes Gateway auto-descobre Telegram via env var mesmo com enabled:false,
+# causando conflito com o proxy webhook. Guardamos numa var local.
+TG_TOKEN=""
 echo "[telegram] Checking for TELEGRAM_BOT_TOKEN in environment..."
-if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-    # Fallback: try to read from local file
-    if [ -f /app/telegram_token.txt ]; then
-        TELEGRAM_BOT_TOKEN=$(cat /app/telegram_token.txt)
-        export TELEGRAM_BOT_TOKEN
-        echo "[telegram] Token carregado de telegram_token.txt: ${TELEGRAM_BOT_TOKEN:0:8}... (${#TELEGRAM_BOT_TOKEN} chars)"
-    else
-        echo "[telegram] AVISO: TELEGRAM_BOT_TOKEN não está definido! Telegram não responderá mensagens."
-    fi
+if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+    TG_TOKEN="$TELEGRAM_BOT_TOKEN"
+    echo "[telegram] Token encontrado no ambiente: ${TG_TOKEN:0:8}... (${#TG_TOKEN} chars)"
+elif [ -f /app/telegram_token.txt ]; then
+    TG_TOKEN=$(cat /app/telegram_token.txt)
+    echo "[telegram] Token carregado de telegram_token.txt: ${TG_TOKEN:0:8}... (${#TG_TOKEN} chars)"
 else
-    echo "[telegram] Token encontrado no ambiente: ${TELEGRAM_BOT_TOKEN:0:8}... (${#TELEGRAM_BOT_TOKEN} chars)"
+    echo "[telegram] AVISO: TELEGRAM_BOT_TOKEN não está definido! Telegram não responderá mensagens."
 fi
 
-# ── Build platforms YAML ────────────────────────────────────────
-# WhatsApp relay only (Telegram handled by standalone poller below)
-# Explicitly disable Telegram polling on the gateway since we use webhook-proxy.py
+# Remove TELEGRAM_BOT_TOKEN do ambiente para o Gateway NÃO auto-descobrir Telegram
+unset TELEGRAM_BOT_TOKEN
+
+# ── Build platforms YAML ──────────────────────────────────
+# Explicitly disable Telegram polling on the gateway since we use webhook via proxy.py
 PLATFORMS_YAML="  platforms:
     telegram:
       enabled: false"
@@ -130,7 +135,7 @@ API_SERVER_KEY="${API_SERVER_KEY:-hermes-space-key-2026}"
 export API_SERVER_KEY="$API_SERVER_KEY"
 echo "[auth] API Server key pronta"
 
-# ── Start Gateway ──────────────────────────────────────────────
+# ── Start Gateway (without Telegram env var) ─────────────────
 echo "=== Iniciando Hermes Gateway na porta ${API_SERVER_PORT} ==="
 hermes gateway run --verbose >> "$HERMES_HOME/logs/gateway.log" 2>&1 &
 GATEWAY_PID=$!
@@ -139,19 +144,9 @@ echo "[gateway] PID: ${GATEWAY_PID}"
 echo "[gateway] Aguardando API ficar pronta..."
 READY=false
 for i in $(seq 1 30); do
-    # Verifica se o gateway está respondendo
     if curl -sf "http://127.0.0.1:${API_SERVER_PORT}/v1/health" > /dev/null 2>&1; then
-        # Verifica dependências externas se o gateway estiver respondendo
         DEPS_OK=true
-        
-        # Verifica Telegram se o token estiver definido
-        if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-            if ! curl -sf "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe" > /dev/null 2>&1; then
-                echo "[gateway] AVISO: Não foi possível conectar com a API do Telegram"
-                DEPS_OK=false
-            fi
-        fi
-        
+
         # Verifica providers de LLM configurados
         if [ -n "$GROQ_API_KEY" ]; then
             if ! curl -sf -H "Authorization: Bearer $GROQ_API_KEY" "https://api.groq.com/openai/v1/models" > /dev/null 2>&1; then
@@ -164,13 +159,12 @@ for i in $(seq 1 30); do
                 DEPS_OK=false
             fi
         elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
-            # Para OpenCode, verificamos se conseguimos alcançar o endpoint
             if ! curl -sf "https://opencode.ai/zen/go/v1/models" > /dev/null 2>&1; then
                 echo "[gateway] AVISO: Não foi possível conectar com a API do OpenCode"
                 DEPS_OK=false
             fi
         fi
-        
+
         if [ "$DEPS_OK" = true ]; then
             echo "[gateway] API pronta depois de ${i}s OK"
             READY=true
@@ -188,8 +182,7 @@ if [ "$READY" != "true" ]; then
     echo "[gateway] AVISO: API nao respondeu depois de 30s"
 fi
 
-# ── Start Webhook Proxy ──────────────────────────────────────────
-# Starts proxy.py on port 7860 (which is the port HF Spaces exposes)
+# ── Start Webhook Proxy ──────────────────────────────────
 PROXY_LOG="$HERMES_HOME/logs/proxy.log"
 export HERMES_API_URL="http://127.0.0.1:7861"
 export HERMES_API_KEY="${API_SERVER_KEY}"
@@ -197,7 +190,8 @@ export HERMES_API_KEY="${API_SERVER_KEY}"
 echo "[proxy] Iniciando proxy webhook na porta ${PORT:-7860} (logs em $PROXY_LOG)..."
 proxy_with_restart() {
     while true; do
-        python3 /app/proxy.py 2>&1 | tee -a "$PROXY_LOG"
+        # Exporta o token SOMENTE para o proxy (Gateway não vê)
+        TELEGRAM_BOT_TOKEN="$TG_TOKEN" python3 /app/proxy.py 2>&1 | tee -a "$PROXY_LOG"
         local EC=${PIPESTATUS[0]}
         echo "[proxy] Proxy saiu (codigo ${EC}), reiniciando em 3s..."
         sleep 3
@@ -215,7 +209,7 @@ else
     tail -5 "$PROXY_LOG" 2>/dev/null || echo "  (log vazio)"
 fi
 
-# ── Graceful shutdown ──────────────────────────────────────────
+# ── Graceful shutdown ────────────────────────────────────
 cleanup() {
     echo "=== Shutting down ==="
     kill ${GATEWAY_PID} ${PROXY_PID:-} 2>/dev/null || true
@@ -224,11 +218,12 @@ cleanup() {
 }
 trap cleanup SIGTERM SIGINT
 
-# ── Startup notification ──────────────────────────────────────
-echo "[notify] Enviando notificacao de startup..."
-HOSTNAME=$(hostname 2>/dev/null || echo "HF Space")
-GIT_HASH=$(git log --oneline -1 2>/dev/null || echo "N/A")
-STARTUP_MSG=$(cat <<MSG
+# ── Startup notification ─────────────────────────────────
+if [ -n "$TG_TOKEN" ]; then
+    echo "[notify] Enviando notificacao de startup..."
+    HOSTNAME=$(hostname 2>/dev/null || echo "HF Space")
+    GIT_HASH=$(git log --oneline -1 2>/dev/null || echo "N/A")
+    STARTUP_MSG=$(cat <<MSG
 ✅ *Hermes Operator reiniciado (Webhook)*
 Container: ${HOSTNAME}
 Versao: ${GIT_HASH}
@@ -236,35 +231,37 @@ Gateway: PID ${GATEWAY_PID} (porta 7861)
 Proxy: PID ${PROXY_PID} (porta ${PORT:-7860})
 MSG
 )
-if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-    NOTIFY_RESP=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    NOTIFY_RESP=$(curl -s -w "\\n%{http_code}" -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
         --data-urlencode "chat_id=1999968153" \
         --data-urlencode "parse_mode=Markdown" \
         --data-urlencode "text=${STARTUP_MSG}" 2>&1 || true)
+    echo "[notify] HTTP $(echo "${NOTIFY_RESP}" | tail -1)"
+    echo "[notify] Resposta: $(echo "${NOTIFY_RESP}" | head -n -1 | tr -d '\\n' | head -c 200)"
 else
-    NOTIFY_RESP="(skipped - no token)\n000"
+    echo "[notify] SKIP - sem token Telegram"
 fi
-echo "[notify] HTTP $(echo "${NOTIFY_RESP}" | tail -1)"
-echo "[notify] Resposta: $(echo "${NOTIFY_RESP}" | head -n -1 | tr -d '\n' | head -c 200)"
 
-# ── Verify proxy still alive ─────────────────────────────────
+# ── Verify proxy and register webhook ────────────────────
 sleep 5
 if kill -0 $PROXY_PID 2>/dev/null; then
     echo "[proxy] Proxy ainda vivo (PID $PROXY_PID)"
-    # Set the webhook URL on Telegram
-    if [ -n "$FLY_APP_NAME" ]; then
-        HOST_DOMAIN="${FLY_APP_NAME}.fly.dev"
-    else
+
+    # Register webhook on Telegram
+    if [ -n "$TG_TOKEN" ]; then
         HOST_DOMAIN="${SPACE_HOST:-heltonhb-hermes-operator.hf.space}"
-    fi
-    WEBHOOK_URL="https://${HOST_DOMAIN}/telegram/webhook"
-    echo "[webhook] Registrando webhook no Telegram: ${WEBHOOK_URL}..."
-    if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+        WEBHOOK_URL="https://${HOST_DOMAIN}/telegram/webhook"
+        echo "[webhook] Registrando webhook no Telegram: ${WEBHOOK_URL}..."
+        WEBHOOK_RESP=$(curl -s -w "\\n%{http_code}" -X POST "https://api.telegram.org/bot${TG_TOKEN}/setWebhook" \
             -d "url=${WEBHOOK_URL}" \
-            -d "allowed_updates=[\"message\",\"edited_message\",\"callback_query\"]" || true
+            -d "allowed_updates=[\"message\",\"edited_message\",\"callback_query\"]" 2>&1 || true)
+        echo "[webhook] HTTP $(echo "${WEBHOOK_RESP}" | tail -1)"
+        echo "[webhook] Resposta: $(echo "${WEBHOOK_RESP}" | head -n -1 | tr -d '\\n' | head -c 200)"
+
+        # Verify
+        WH_INFO=$(curl -s "https://api.telegram.org/bot${TG_TOKEN}/getWebhookInfo" 2>&1 || true)
+        echo "[webhook] Info: $(echo "$WH_INFO" | head -c 300)"
     else
-        echo "[webhook] SKIP: token não disponível"
+        echo "[webhook] SKIP - sem token Telegram"
     fi
 else
     echo "[proxy] Proxy MORREU! Log:"
@@ -273,8 +270,7 @@ fi
 
 echo "=== Hermes Operator pronto ==="
 
-# ── Periodic health check ────────────────────────────────────
-# Shows proxy log tail + timestamps every 60s on stdout
+# ── Periodic health check ────────────────────────────────
 health_loop() {
     while true; do
         sleep 60
@@ -284,14 +280,13 @@ health_loop() {
         else
             echo "[proxy] Proxy status: DEAD"
         fi
-        
-        # Verifica se o gateway está respondendo
+
         if curl -sf "http://127.0.0.1:${API_SERVER_PORT}/v1/health" > /dev/null 2>&1; then
             echo "[gateway] Status: OK"
         else
             echo "[gateway] Status: INDISPONÍVEL"
         fi
-        
+
         local LOG_LINES=$(tail -c 2000 "$PROXY_LOG" 2>/dev/null | wc -l)
         if [ "$LOG_LINES" -gt 0 ]; then
             echo "[proxy] Last ${LOG_LINES} lines of log:"
