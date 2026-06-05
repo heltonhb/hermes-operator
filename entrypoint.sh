@@ -8,7 +8,22 @@ if [ -z "$GROQ_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ] && [ -z "$OPENCODE_ZEN
     exit 1
 fi
 
+# Inicializa o volume persistente se estiver vazio
+if [ ! -f "$HERMES_HOME/cron/jobs.json" ]; then
+    echo "[volume] Inicializando volume persistente a partir de /app/initial_hermes..."
+    mkdir -p "$HERMES_HOME/cron"
+    cp -r /app/initial_hermes/* "$HERMES_HOME/" || true
+fi
+
 mkdir -p "$HERMES_HOME"/{logs,sessions}
+
+# Inicia o cron se não estiver rodando
+if ! pgrep cron > /dev/null; then
+    echo "[cron] Iniciando serviço cron..."
+    service cron start
+else
+    echo "[cron] Cron já está rodando"
+fi
 
 # Priority: groq > opencode > openrouter
 if [ -n "$GROQ_API_KEY" ]; then
@@ -25,15 +40,20 @@ elif [ -n "$OPENROUTER_API_KEY" ]; then
     echo "[openrouter] Usando deepseek/deepseek-v4-flash"
 fi
 
-# ── Telegram token (baked into image, hex-encoded) ──────────────
-echo "[telegram] Decoding baked token..."
-TELEGRAM_BOT_TOKEN=$(printf '\x38\x39\x38\x35\x33\x37\x38\x32\x37\x36\x3a\x41\x41\x48\x70\x57\x4a\x52\x4d\x56\x53\x47\x68\x44\x34\x32\x51\x30\x30\x43\x52\x75\x63\x62\x44\x4a\x57\x45\x59\x42\x56\x48\x67\x55\x6b\x30')
-export TELEGRAM_BOT_TOKEN
-echo "[telegram] Token: ${TELEGRAM_BOT_TOKEN:0:8}... (${#TELEGRAM_BOT_TOKEN} chars)"
+# ── Telegram token (from environment) ──────────────
+echo "[telegram] Checking for TELEGRAM_BOT_TOKEN in environment..."
+if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+    echo "[telegram] AVISO: TELEGRAM_BOT_TOKEN não está definido! Funcionalidades do Telegram estarão desativadas."
+else
+    echo "[telegram] Token encontrado: ${TELEGRAM_BOT_TOKEN:0:8}... (${#TELEGRAM_BOT_TOKEN} chars)"
+fi
 
 # ── Build platforms YAML ────────────────────────────────────────
 # WhatsApp relay only (Telegram handled by standalone poller below)
-PLATFORMS_YAML="  platforms:"
+# Explicitly disable Telegram polling on the gateway since we use webhook-proxy.py
+PLATFORMS_YAML="  platforms:
+    telegram:
+      enabled: false"
 if [ -n "$BRIDGE_RELAY_URL" ]; then
     PLATFORMS_YAML="${PLATFORMS_YAML}
     whatsapp:
@@ -86,10 +106,13 @@ sessions:
 display:
   language: pt
   show_cost: false
+web:
+  backend: ddgs
 platform_toolsets:
   api_server:
     - web
 CONFEOF
+cp "$HERMES_HOME/config.yaml" /app/config.yaml
 
 export API_SERVER_ENABLED=true
 export API_SERVER_HOST=0.0.0.0
@@ -109,10 +132,47 @@ echo "[gateway] PID: ${GATEWAY_PID}"
 echo "[gateway] Aguardando API ficar pronta..."
 READY=false
 for i in $(seq 1 30); do
+    # Verifica se o gateway está respondendo
     if curl -sf "http://127.0.0.1:${API_SERVER_PORT}/v1/health" > /dev/null 2>&1; then
-        echo "[gateway] API pronta depois de ${i}s OK"
-        READY=true
-        break
+        # Verifica dependências externas se o gateway estiver respondendo
+        DEPS_OK=true
+        
+        # Verifica Telegram se o token estiver definido
+        if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+            if ! curl -sf "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe" > /dev/null 2>&1; then
+                echo "[gateway] AVISO: Não foi possível conectar com a API do Telegram"
+                DEPS_OK=false
+            fi
+        fi
+        
+        # Verifica providers de LLM configurados
+        if [ -n "$GROQ_API_KEY" ]; then
+            if ! curl -sf -H "Authorization: Bearer $GROQ_API_KEY" "https://api.groq.com/openai/v1/models" > /dev/null 2>&1; then
+                echo "[gateway] AVISO: Não foi possível conectar com a API do Groq"
+                DEPS_OK=false
+            fi
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+            if ! curl -sf -H "Authorization: Bearer $OPENROUTER_API_KEY" "https://openrouter.ai/api/v1/models" > /dev/null 2>&1; then
+                echo "[gateway] AVISO: Não foi possível conectar com a API do OpenRouter"
+                DEPS_OK=false
+            fi
+        elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
+            # Para OpenCode, verificamos se conseguimos alcançar o endpoint
+            if ! curl -sf "https://opencode.ai/zen/go/v1/models" > /dev/null 2>&1; then
+                echo "[gateway] AVISO: Não foi possível conectar com a API do OpenCode"
+                DEPS_OK=false
+            fi
+        fi
+        
+        if [ "$DEPS_OK" = true ]; then
+            echo "[gateway] API pronta depois de ${i}s OK"
+            READY=true
+            break
+        else
+            echo "[gateway] API respondendo, mas algumas dependências estão indisponíveis (tentativa $i/30)"
+        fi
+    else
+        echo "[gateway] Aguardando API ficar pronta... (tentativa $i/30)"
     fi
     sleep 1
 done
@@ -181,7 +241,11 @@ sleep 5
 if kill -0 $PROXY_PID 2>/dev/null; then
     echo "[proxy] Proxy ainda vivo (PID $PROXY_PID)"
     # Set the webhook URL on Telegram
-    HOST_DOMAIN="${SPACE_HOST:-heltonhb-hermes-operator.hf.space}"
+    if [ -n "$FLY_APP_NAME" ]; then
+        HOST_DOMAIN="${FLY_APP_NAME}.fly.dev"
+    else
+        HOST_DOMAIN="${SPACE_HOST:-heltonhb-hermes-operator.hf.space}"
+    fi
     WEBHOOK_URL="https://${HOST_DOMAIN}/telegram/webhook"
     echo "[webhook] Registrando webhook no Telegram: ${WEBHOOK_URL}..."
     curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
@@ -205,6 +269,14 @@ health_loop() {
         else
             echo "[proxy] Proxy status: DEAD"
         fi
+        
+        # Verifica se o gateway está respondendo
+        if curl -sf "http://127.0.0.1:${API_SERVER_PORT}/v1/health" > /dev/null 2>&1; then
+            echo "[gateway] Status: OK"
+        else
+            echo "[gateway] Status: INDISPONÍVEL"
+        fi
+        
         local LOG_LINES=$(tail -c 2000 "$PROXY_LOG" 2>/dev/null | wc -l)
         if [ "$LOG_LINES" -gt 0 ]; then
             echo "[proxy] Last ${LOG_LINES} lines of log:"

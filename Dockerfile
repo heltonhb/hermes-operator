@@ -6,10 +6,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
+    logrotate \
     && rm -rf /var/lib/apt/lists/*
 
 # Instala Hermes Agent com extras de messaging (Telegram, WhatsApp, etc.)
 RUN pip install --no-cache-dir "hermes-agent[all]"
+
+# Instala backend de busca DuckDuckGo (gratuito, sem API key)
+RUN pip install --no-cache-dir duckduckgo_search
 
 # Cria diretório do Hermes
 ENV HERMES_HOME=/root/.hermes
@@ -22,7 +26,17 @@ COPY telegram_poller.py /app/telegram_poller.py
 COPY proxy.py /app/proxy.py
 RUN chmod +x /app/entrypoint.sh
 
+# Copia configurações iniciais de cron para inicializar o volume
+RUN mkdir -p /app/initial_hermes/cron
+COPY cron_jobs.json /app/initial_hermes/cron/jobs.json
+# Copia configuração do logrotate
+COPY config/logrotate.conf /etc/logrotate.d/hermes-operator
+
 # Porta do HF Spaces
 ENV PORT=7860
+
+# Adiciona job de logrotate para execução diária
+RUN echo "0 0 * * * root /usr/sbin/logrotate /etc/logrotate.d/hermes-operator" > /etc/cron.d/hermes-operator-logrotate && \
+    chmod 0644 /etc/cron.d/hermes-operator-logrotate
 
 CMD ["/app/entrypoint.sh"]

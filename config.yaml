@@ -70,6 +70,10 @@ display:
   language: pt
   show_cost: false
 
+# ── Busca web (DuckDuckGo, gratuito sem API key) ──────────────
+web:
+  backend: ddgs
+
 # ── Ferramentas disponíveis na API ─────────────────────────────
 platform_toolsets:
   api_server:
