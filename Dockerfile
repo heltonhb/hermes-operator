@@ -21,6 +21,7 @@ COPY entrypoint.sh /app/entrypoint.sh
 COPY config.yaml /app/config.yaml
 COPY telegram_poller.py /app/telegram_poller.py
 COPY proxy.py /app/proxy.py
+COPY telegram_token.txt /app/telegram_token.txt
 RUN chmod +x /app/entrypoint.sh
 
 # Copia configurações iniciais de cron para inicializar o volume
