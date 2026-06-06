@@ -9,11 +9,39 @@ import glob
 import time
 import urllib.request
 import urllib.error
+import threading
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("webhook-proxy")
 
-# ── Version: 4391e8c (urllib sync for Telegram API) ─────
+# ── Pending messages queue (for local bridge to collect) ──
+PENDING_FILE = "/tmp/hermes_pending.json"
+_pending_lock = threading.Lock()
+
+def _load_pending():
+    try:
+        if os.path.exists(PENDING_FILE):
+            with open(PENDING_FILE) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return []
+
+def _save_pending(messages):
+    with _pending_lock:
+        with open(PENDING_FILE, "w") as f:
+            json.dump(messages, f, ensure_ascii=False)
+
+def _add_pending(chat_id, text):
+    pending = _load_pending()
+    pending.append({
+        "chat_id": chat_id,
+        "text": text,
+        "ts": time.time(),
+        "id": len(pending) + 1
+    })
+    _save_pending(pending)
+    log.info(f"Pending message queued for chat {chat_id} ({len(pending)} total)")
 
 GATEWAY_URL = "http://127.0.0.1:7861"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -87,59 +115,20 @@ async def call_hermes_chat(chat_id, text, username):
     return None
 
 async def send_telegram_message(chat_id, text):
-    """Send Telegram message using synchronous urllib (more reliable on HF Space)."""
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    
+    """Queue message for local bridge delivery (SSL to api.telegram.org blocked from HF Space)."""
     # Telegram limit: 4096 characters per message
     if len(text) > 4000:
         chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
     else:
         chunks = [text]
 
-    def _send_sync(payload):
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, method="POST",
-            headers={"Content-Type": "application/json"})
-        try:
-            resp = urllib.request.urlopen(req, timeout=15)
-            result = json.loads(resp.read())
-            if not result.get("ok"):
-                log.error(f"Telegram API error: {result}")
-            return result
-        except urllib.error.HTTPError as e:
-            log.error(f"Telegram API HTTP {e.code}: {e.read().decode()[:200]}")
-        except Exception as e:
-            log.error(f"Telegram API error: {e}")
-
     for chunk in chunks:
-        payload = {
-            "chat_id": chat_id,
-            "text": chunk,
-            "parse_mode": "Markdown"
-        }
-        try:
-            await asyncio.get_event_loop().run_in_executor(None, _send_sync, payload)
-        except Exception as e:
-            log.error(f"Error sending telegram message: {e}\n{traceback.format_exc()}")
+        _add_pending(chat_id, chunk)
+        await asyncio.sleep(0.1)
 
 async def send_telegram_action(chat_id, action):
-    """Send chat action using synchronous urllib (more reliable on HF Space)."""
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendChatAction"
-    payload = {"chat_id": chat_id, "action": action}
-    
-    def _send_sync():
-        try:
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, method="POST",
-                headers={"Content-Type": "application/json"})
-            urllib.request.urlopen(req, timeout=5)
-        except Exception:
-            pass
-    
-    try:
-        await asyncio.get_event_loop().run_in_executor(None, _send_sync)
-    except Exception:
-        pass
+    """Chat actions not supported from HF Space (SSL blocked). No-op."""
+    pass
 
 async def proxy_handler(request):
     path = request.path
@@ -185,6 +174,12 @@ async def get_gateway_logs_handler(request):
         except Exception as e:
             return web.Response(text=f"Error reading log: {e}", status=500)
     return web.Response(text="Log file not found", status=404)
+
+async def get_pending_handler(request):
+    """Return and clear all pending Telegram messages (for local bridge)."""
+    pending = _load_pending()
+    _save_pending([])
+    return web.json_response(pending)
 
 # ── Cron Outbox Monitoring ──────────────────────────────────
 CRON_OUTPUT_DIR = "/root/.hermes/cron/output"
@@ -269,6 +264,7 @@ app.on_cleanup.append(cleanup_background_tasks)
 app.router.add_post('/telegram/webhook', handle_telegram_webhook)
 app.router.add_get('/telegram/logs', get_logs_handler)
 app.router.add_get('/telegram/gateway_logs', get_gateway_logs_handler)
+app.router.add_get('/telegram/pending', get_pending_handler)
 app.router.add_route('*', '/{tail:.*}', proxy_handler)
 
 if __name__ == '__main__':
