@@ -8,6 +8,8 @@ import asyncio
 import glob
 import time
 import socket
+import urllib.request
+import urllib.error
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("webhook-proxy")
@@ -86,6 +88,7 @@ async def call_hermes_chat(chat_id, text, username):
     return None
 
 async def send_telegram_message(chat_id, text):
+    """Send Telegram message using synchronous urllib (more reliable on HF Space)."""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     
     # Telegram limit: 4096 characters per message
@@ -94,30 +97,51 @@ async def send_telegram_message(chat_id, text):
     else:
         chunks = [text]
 
-    async with aiohttp.ClientSession(connector=IPV4_CONNECTOR) as session:
-        for chunk in chunks:
-            payload = {
-                "chat_id": chat_id,
-                "text": chunk,
-                "parse_mode": "Markdown"
-            }
-            try:
-                async with session.post(url, json=payload, timeout=15) as r:
-                    res = await r.json()
-                    if not res.get("ok"):
-                        log.error(f"Failed to send telegram message chunk: {res}")
-            except Exception as e:
-                log.error(f"Error sending telegram message: {e}\n{traceback.format_exc()}")
+    def _send_sync(payload):
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST",
+            headers={"Content-Type": "application/json"})
+        # Force IPv4 via socket
+        try:
+            resp = urllib.request.urlopen(req, timeout=15)
+            result = json.loads(resp.read())
+            if not result.get("ok"):
+                log.error(f"Telegram API error: {result}")
+            return result
+        except urllib.error.HTTPError as e:
+            log.error(f"Telegram API HTTP {e.code}: {e.read().decode()[:200]}")
+        except Exception as e:
+            log.error(f"Telegram API error: {e}")
+
+    for chunk in chunks:
+        payload = {
+            "chat_id": chat_id,
+            "text": chunk,
+            "parse_mode": "Markdown"
+        }
+        try:
+            await asyncio.get_event_loop().run_in_executor(None, _send_sync, payload)
+        except Exception as e:
+            log.error(f"Error sending telegram message: {e}\n{traceback.format_exc()}")
 
 async def send_telegram_action(chat_id, action):
+    """Send chat action using synchronous urllib (more reliable on HF Space)."""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendChatAction"
     payload = {"chat_id": chat_id, "action": action}
-    async with aiohttp.ClientSession(connector=IPV4_CONNECTOR) as session:
+    
+    def _send_sync():
         try:
-            async with session.post(url, json=payload, timeout=5) as r:
-                pass
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(url, data=data, method="POST",
+                headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=5)
         except Exception:
             pass
+    
+    try:
+        await asyncio.get_event_loop().run_in_executor(None, _send_sync)
+    except Exception:
+        pass
 
 async def proxy_handler(request):
     path = request.path
