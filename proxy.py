@@ -7,7 +7,6 @@ import traceback
 import asyncio
 import glob
 import time
-import socket
 import urllib.request
 import urllib.error
 
@@ -21,8 +20,6 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 HERMES_API_KEY = os.environ.get("HERMES_API_KEY", "")
 DEFAULT_MODEL = os.environ.get("HERMES_MODEL", "llama-3.3-70b-versatile")
 
-# Force IPv4 for Telegram API — HF Space has IPv6 connectivity issues
-IPV4_CONNECTOR = aiohttp.TCPConnector(family=socket.AF_INET)
 
 async def handle_telegram_webhook(request):
     try:
@@ -103,7 +100,6 @@ async def send_telegram_message(chat_id, text):
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, method="POST",
             headers={"Content-Type": "application/json"})
-        # Force IPv4 via socket
         try:
             resp = urllib.request.urlopen(req, timeout=15)
             result = json.loads(resp.read())
