@@ -7,6 +7,7 @@ import traceback
 import asyncio
 import glob
 import time
+import socket
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("webhook-proxy")
@@ -15,6 +16,9 @@ GATEWAY_URL = "http://127.0.0.1:7861"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 HERMES_API_KEY = os.environ.get("HERMES_API_KEY", "")
 DEFAULT_MODEL = os.environ.get("HERMES_MODEL", "llama-3.3-70b-versatile")
+
+# Force IPv4 for Telegram API — HF Space has IPv6 connectivity issues
+IPV4_CONNECTOR = aiohttp.TCPConnector(family=socket.AF_INET)
 
 async def handle_telegram_webhook(request):
     try:
@@ -90,7 +94,7 @@ async def send_telegram_message(chat_id, text):
     else:
         chunks = [text]
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=IPV4_CONNECTOR) as session:
         for chunk in chunks:
             payload = {
                 "chat_id": chat_id,
@@ -108,7 +112,7 @@ async def send_telegram_message(chat_id, text):
 async def send_telegram_action(chat_id, action):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendChatAction"
     payload = {"chat_id": chat_id, "action": action}
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=IPV4_CONNECTOR) as session:
         try:
             async with session.post(url, json=payload, timeout=5) as r:
                 pass
