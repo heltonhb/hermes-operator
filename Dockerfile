@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Instala Hermes Agent com extras de messaging + DuckDuckGo search gratuito
+# (usando urllib sync para Telegram API — evita TimeoutError do aiohttp)
 RUN pip install --no-cache-dir "hermes-agent[all]" duckduckgo_search
 
 # Cria diretório do Hermes
@@ -27,7 +28,6 @@ RUN chmod +x /app/entrypoint.sh
 # Copia configurações iniciais de cron para inicializar o volume
 RUN mkdir -p /app/initial_hermes/cron
 COPY cron_jobs.json /app/initial_hermes/cron/jobs.json
-# Copia configuração do logrotate
 COPY config/logrotate.conf /etc/logrotate.d/hermes-operator
 
 # Porta do HF Spaces
