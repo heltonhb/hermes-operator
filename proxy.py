@@ -14,6 +14,8 @@ import urllib.error
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("webhook-proxy")
 
+# ── Version: 4391e8c (urllib sync for Telegram API) ─────
+
 GATEWAY_URL = "http://127.0.0.1:7861"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 HERMES_API_KEY = os.environ.get("HERMES_API_KEY", "")
