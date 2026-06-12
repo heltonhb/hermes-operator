@@ -144,7 +144,21 @@ async def _send_via_worker(chat_id, text, parse_mode="Markdown"):
             ) as r:
                 if r.status != 200:
                     err = await r.text()
-                    log.error(f"Worker relay error ({r.status}): {err[:200]}")
+                    log.warning(f"Worker relay error ({r.status}): {err[:200]}")
+                    # If it's a parse error (invalid markdown), retry without parse_mode
+                    if r.status == 400 and "parse entities" in err:
+                        log.info("Retrying without parse_mode (plain text)")
+                        async with session.post(
+                            TELEGRAM_WORKER_URL,
+                            headers={"Authorization": f"Bearer {TELEGRAM_WORKER_KEY}", "Content-Type": "application/json"},
+                            json={"chat_id": chat_id, "text": text},
+                            timeout=30
+                        ) as r2:
+                            if r2.status == 200:
+                                log.info(f"Sent via Worker (plain text) to chat {chat_id}")
+                                return True
+                            err2 = await r2.text()
+                            log.error(f"Worker relay error even without parse_mode ({r2.status}): {err2[:200]}")
                     return False
                 log.info(f"Sent via Worker to chat {chat_id}")
                 return True
