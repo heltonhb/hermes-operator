@@ -2,16 +2,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instala dependências do sistema
+# Instala dependências do sistema (essenciais apenas)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     logrotate \
     && rm -rf /var/lib/apt/lists/*
 
-# Instala Hermes Agent com extras de messaging + DuckDuckGo search gratuito
-# (usando urllib sync para Telegram API — evita TimeoutError do aiohttp)
-RUN pip install --no-cache-dir "hermes-agent[all]" duckduckgo_search
+# Timeout maior pro pip (HF Space é lento)
+ENV PIP_DEFAULT_TIMEOUT=120
+
+# Instala apenas os extras necessários (não [all] — reduz drasticamente o build)
+# messaging = Telegram/WhatsApp | web = DuckDuckGo search | cron = cron jobs
+RUN pip install --no-cache-dir "hermes-agent[messaging,web,cron]" duckduckgo_search
 
 # Cria diretório do Hermes
 ENV HERMES_HOME=/root/.hermes
@@ -22,8 +25,9 @@ COPY entrypoint.sh /app/entrypoint.sh
 COPY config.yaml /app/config.yaml
 COPY telegram_poller.py /app/telegram_poller.py
 COPY proxy.py /app/proxy.py
-COPY telegram_token.txt /app/telegram_token.txt
 RUN chmod +x /app/entrypoint.sh
+
+# Token do Telegram via env var TELEGRAM_BOT_TOKEN (HF Space Secret)
 
 # Copia configurações iniciais de cron para inicializar o volume
 RUN mkdir -p /app/initial_hermes/cron
