@@ -124,12 +124,9 @@ async def call_hermes_chat(chat_id, text, username):
     return None
 
 async def _send_via_worker(chat_id, text, parse_mode="Markdown"):
-    """POST mensagem ao Cloudflare Worker, que relay para Telegram API."""
-    token_len = len(TELEGRAM_TOKEN)
-    log.info(f"Worker send: token_len={token_len} chat_id={chat_id} text_len={len(text)}")
-    if not TELEGRAM_TOKEN:
-        log.error("TELEGRAM_TOKEN está vazio! Worker não pode enviar.")
-        return False
+    """POST mensagem ao Cloudflare Worker, que relay para Telegram API.
+    O Worker usa seu próprio env.TELEGRAM_BOT_TOKEN — o proxy não precisa do token."""
+    log.info(f"Worker send: chat_id={chat_id} text_len={len(text)}")
     async with aiohttp.ClientSession() as session:
         try:
             async with session.post(
