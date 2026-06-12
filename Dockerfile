@@ -38,16 +38,11 @@ COPY whatsapp-bridge/ /app/whatsapp-bridge/
 COPY whatsapp-creds.json /app/whatsapp-creds.json
 RUN cd /app/whatsapp-bridge && \
     npm install --legacy-peer-deps --no-audit --no-fund 2>&1 | tail -3 && \
-    # Sobrescreve o bridge em ambos os caminhos (dependendo da estrutura do pacote pip)
-    mkdir -p /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge && \
-    mkdir -p /usr/local/lib/python3.11/site-packages/scripts/whatsapp-bridge && \
-    cp /app/whatsapp-bridge/bridge.js /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge/bridge.js && \
-    cp /app/whatsapp-bridge/package.json /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge/package.json && \
-    cp /app/whatsapp-bridge/bridge.js /usr/local/lib/python3.11/site-packages/scripts/whatsapp-bridge/bridge.js && \
-    cp /app/whatsapp-bridge/package.json /usr/local/lib/python3.11/site-packages/scripts/whatsapp-bridge/package.json && \
-    # Garante que node_modules esteja acessível (bridge.js precisa dele via require)
-    cp -r /app/whatsapp-bridge/node_modules /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge/ && \
-    cp -r /app/whatsapp-bridge/node_modules /usr/local/lib/python3.11/site-packages/scripts/whatsapp-bridge/
+    # Substitui o bridge padrão do pip pelo nosso (QR capture)
+    rm -rf /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge && \
+    ln -sf /app/whatsapp-bridge /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge && \
+    rm -rf /usr/local/lib/python3.11/site-packages/scripts/whatsapp-bridge && \
+    ln -sf /app/whatsapp-bridge /usr/local/lib/python3.11/site-packages/scripts/whatsapp-bridge
 
 # Token do Telegram via env var TELEGRAM_BOT_TOKEN (HF Space Secret)
 
