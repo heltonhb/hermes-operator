@@ -80,12 +80,10 @@ PLATFORMS_YAML="  platforms:
     telegram:
       enabled: false"
 
-# WhatsApp via Baileys bridge gerenciado pelo gateway
+# WhatsApp via Baileys bridge — DESATIVADO: HF Space bloqueia WSS de saída
 PLATFORMS_YAML="${PLATFORMS_YAML}
     whatsapp:
-      enabled: true
-      bridge_port: 3000
-      bridge_script: /app/whatsapp-bridge/bridge.js"
+      enabled: false"
 
 cat > "$HERMES_HOME/config.yaml" <<CONFEOF
 model:
