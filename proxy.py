@@ -139,7 +139,6 @@ async def _send_via_worker(chat_id, text, parse_mode="Markdown"):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "token": TELEGRAM_TOKEN,
                     "chat_id": chat_id,
                     "text": text,
                     "parse_mode": parse_mode
@@ -189,7 +188,6 @@ async def send_telegram_action(chat_id, action):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "token": TELEGRAM_TOKEN,
                     "chat_id": chat_id,
                     "action": "sendChatAction",
                     "action_value": action
