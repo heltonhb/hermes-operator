@@ -221,8 +221,18 @@ async function startSocket() {
       connectionState = 'disconnected';
 
       if (reason === DisconnectReason.loggedOut) {
-        console.log('❌ Logged out. Delete session and restart to re-authenticate.');
-        process.exit(1);
+        console.log('❌ Logged out. Cleaning session and requesting new auth...');
+        // Auto-clean: remove old session files so new QR/pairing flow starts
+        try {
+          const files = readdirSync(SESSION_DIR);
+          for (const f of files) {
+            if (f.endsWith('.json')) unlinkSync(path.join(SESSION_DIR, f));
+          }
+          console.log('🧹 Session cleaned. Will generate new QR on reconnect.');
+        } catch(e) {
+          console.log('⚠️ Could not clean session:', e.message);
+        }
+        setTimeout(startSocket, 1000);
       } else {
         // 515 = restart requested (common after pairing). Always reconnect.
         if (reason === 515) {
@@ -708,6 +718,44 @@ app.get('/health', (req, res) => {
     queueLength: messageQueue.length,
     uptime: process.uptime(),
   });
+});
+
+// Reset session: delete all .json files and restart socket
+app.post('/reset-session', (req, res) => {
+  try {
+    const files = readdirSync(SESSION_DIR);
+    let deleted = 0;
+    for (const f of files) {
+      if (f.endsWith('.json')) {
+        unlinkSync(path.join(SESSION_DIR, f));
+        deleted++;
+      }
+    }
+    res.json({ ok: true, deleted });
+    // Restart socket after brief delay
+    console.log(`🧹 Session reset via API (${deleted} files cleaned). Restarting...`);
+    setTimeout(() => startSocket(), 500);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Start pairing code auth (no QR needed — user types code in WhatsApp)
+app.post('/pairing', async (req, res) => {
+  const phone = req.body?.phone || req.query?.phone;
+  if (!phone) {
+    return res.status(400).json({ ok: false, error: 'Missing phone number. Send {"phone": "5511971685906"}' });
+  }
+  if (!sock) {
+    return res.status(503).json({ ok: false, error: 'Socket not ready. Wait for bridge to initialize.' });
+  }
+  try {
+    const code = await sock.requestPairingCode(phone);
+    console.log(`🔑 Pairing code requested for ${phone}: ${code}`);
+    res.json({ ok: true, code, phone });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // Start

@@ -399,6 +399,37 @@ app.router.add_get('/whatsapp/qr', handle_whatsapp_qr)
 app.router.add_get('/whatsapp/status', lambda r: handle_whatsapp_qr(r))
 app.router.add_route('*', '/{tail:.*}', proxy_handler)
 
+# ── WhatsApp Bridge endpoints (proxied to internal bridge on :3000) ──
+BRIDGE_URL = "http://127.0.0.1:3000"
+
+async def _proxy_bridge_post(path, data):
+    """Forward a POST to the internal bridge and return its response."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{BRIDGE_URL}{path}", json=data, timeout=15) as r:
+                body = await r.json()
+                return web.json_response(body, status=r.status)
+    except asyncio.TimeoutError:
+        return web.json_response({"ok": False, "error": "Bridge timeout"}, status=504)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=502)
+
+async def handle_whatsapp_reset(request):
+    """Reset WhatsApp session (delete creds, restart bridge)."""
+    return await _proxy_bridge_post("/reset-session", {})
+
+async def handle_whatsapp_pairing(request):
+    """Request pairing code for given phone number."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    phone = data.get("phone", "5511971685906")
+    return await _proxy_bridge_post("/pairing", {"phone": phone})
+
+app.router.add_post("/whatsapp/reset", handle_whatsapp_reset)
+app.router.add_post("/whatsapp/pairing", handle_whatsapp_pairing)
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", "7860"))
     log.info(f"Starting proxy server on port {port}, forwarding to {GATEWAY_URL}...")
