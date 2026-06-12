@@ -2,12 +2,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instala dependências do sistema (essenciais apenas)
+# Instala dependências do sistema (Node.js para WhatsApp bridge)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     logrotate \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Instala Node.js 22.x para WhatsApp Baileys bridge
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/* && \
+    node --version && npm --version
 
 # Timeout maior pro pip (HF Space é lento)
 ENV PIP_DEFAULT_TIMEOUT=120
@@ -23,9 +30,14 @@ RUN mkdir -p $HERMES_HOME/logs $HERMES_HOME/sessions
 # Copia entrypoint e config
 COPY entrypoint.sh /app/entrypoint.sh
 COPY config.yaml /app/config.yaml
-COPY telegram_poller.py /app/telegram_poller.py
 COPY proxy.py /app/proxy.py
 RUN chmod +x /app/entrypoint.sh
+
+# ── WhatsApp Baileys bridge ──
+COPY whatsapp-bridge/ /app/whatsapp-bridge/
+COPY whatsapp-creds.json /app/whatsapp-creds.json
+RUN cd /app/whatsapp-bridge && \
+    npm install --legacy-peer-deps --no-audit --no-fund 2>&1 | tail -3
 
 # Token do Telegram via env var TELEGRAM_BOT_TOKEN (HF Space Secret)
 

@@ -52,10 +52,62 @@ DEFAULT_MODEL = os.environ.get("HERMES_MODEL", "llama-3.3-70b-versatile")
 TELEGRAM_WORKER_URL = os.environ.get("TELEGRAM_WORKER_URL", "")
 TELEGRAM_WORKER_KEY = os.environ.get("TELEGRAM_WORKER_KEY", "")
 WORKER_ENABLED = bool(TELEGRAM_WORKER_URL and TELEGRAM_WORKER_KEY)
-if WORKER_ENABLED:
+if TELEGRAM_WORKER_URL:
     log.info(f"Telegram Worker relay configurado: {TELEGRAM_WORKER_URL}")
 else:
     log.info("Telegram Worker NÃO configurado — usando bridge local (legado)")
+
+# ═══════════════════════════════════════════════
+# QR Code para WhatsApp
+# ═══════════════════════════════════════════════
+
+QR_FILE = "/tmp/whatsapp-qr.txt"
+
+async def handle_whatsapp_qr(request):
+    """Serve the WhatsApp QR code as an HTML page with JS-generated QR."""
+    qr_text = ""
+    if os.path.exists(QR_FILE):
+        with open(QR_FILE, "r") as f:
+            qr_text = f.read().strip()
+    if not qr_text:
+        return web.Response(
+            text=json.dumps({
+                "status": "no_qr",
+                "message": "Nenhum QR code disponivel. Se o bridge estiver rodando, aguarde a geracao.",
+                "session_exists": os.path.exists(os.path.expanduser("~/.hermes/whatsapp/session/creds.json"))
+            }),
+            content_type="application/json"
+        )
+    # Serve as HTML page with JS QR generation
+    html_page = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>WhatsApp QR - Hermes Operator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body {{ font-family: sans-serif; background: #111; color: #eee; display: flex;
+  flex-direction: column; align-items: center; justify-content: center;
+  min-height: 100vh; margin: 0; padding: 20px; }}
+h1 {{ color: #25D366; margin-bottom: 10px; }}
+p {{ color: #aaa; margin-bottom: 20px; }}
+#qrcode img {{ max-width: 400px; width: 100%; height: auto; }}
+.loading {{ color: #666; font-style: italic; }}
+</style>
+</head>
+<body>
+<h1>💬 WhatsApp QR Code</h1>
+<p>Escaneie com WhatsApp → Menu → Dispositivos conectados</p>
+<div id="qrcode" class="loading">Gerando QR code...</div>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+new QRCode(document.getElementById("qrcode"), {{
+  text: {json.dumps(qr_text)},
+  width: 300, height: 300
+}});
+document.getElementById("qrcode").classList.remove("loading");
+</script>
+</body>
+</html>"""
+    return web.Response(text=html_page, content_type="text/html; charset=utf-8")
 
 
 async def handle_telegram_webhook(request):
@@ -343,6 +395,8 @@ app.router.add_post('/telegram/webhook', handle_telegram_webhook)
 app.router.add_get('/telegram/logs', get_logs_handler)
 app.router.add_get('/telegram/gateway_logs', get_gateway_logs_handler)
 app.router.add_get('/telegram/pending', get_pending_handler)
+app.router.add_get('/whatsapp/qr', handle_whatsapp_qr)
+app.router.add_get('/whatsapp/status', lambda r: handle_whatsapp_qr(r))
 app.router.add_route('*', '/{tail:.*}', proxy_handler)
 
 if __name__ == '__main__':

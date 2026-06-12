@@ -16,9 +16,13 @@ telegram_token.txt
 # ── AppImage local ─────────────────────────────
 squashfs-root/
 
+# ── WhatsApp bridge (installed in Docker) ──────
+whatsapp-bridge/node_modules/
+
 # ── Sistema ────────────────────────────────────
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
 *~
+whatsapp-session.tar.gz

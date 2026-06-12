@@ -17,6 +17,19 @@ fi
 
 mkdir -p "$HERMES_HOME"/{logs,sessions}
 
+# ── WhatsApp Baileys session ──────────────────────────────
+WHATSAPP_SESSION_DIR="$HERMES_HOME/whatsapp/session"
+if [ ! -f "$WHATSAPP_SESSION_DIR/creds.json" ] && [ -f /app/whatsapp-creds.json ]; then
+    echo "[whatsapp] Copiando creds.json inicial..."
+    mkdir -p "$WHATSAPP_SESSION_DIR"
+    cp /app/whatsapp-creds.json "$WHATSAPP_SESSION_DIR/creds.json"
+    echo "[whatsapp] creds.json copiado ($(wc -c < "$WHATSAPP_SESSION_DIR/creds.json") bytes)"
+elif [ -f "$WHATSAPP_SESSION_DIR/creds.json" ]; then
+    echo "[whatsapp] Sessao WhatsApp existente: $(wc -c < "$WHATSAPP_SESSION_DIR/creds.json") bytes"
+else
+    echo "[whatsapp] AVISO: Nenhuma sessao WhatsApp encontrada. QR sera gerado na primeira execucao."
+fi
+
 # Inicia o cron se não estiver rodando
 if ! pgrep cron > /dev/null; then
     echo "[cron] Iniciando serviço cron..."
@@ -66,13 +79,13 @@ unset TELEGRAM_BOT_TOKEN
 PLATFORMS_YAML="  platforms:
     telegram:
       enabled: false"
-if [ -n "$BRIDGE_RELAY_URL" ]; then
-    PLATFORMS_YAML="${PLATFORMS_YAML}
+
+# WhatsApp via Baileys bridge gerenciado pelo gateway
+PLATFORMS_YAML="${PLATFORMS_YAML}
     whatsapp:
       enabled: true
-      relay_url: ${BRIDGE_RELAY_URL}
-      relay_api_key: ${BRIDGE_API_KEY}"
-fi
+      bridge_port: 3000
+      bridge_script: /app/whatsapp-bridge/bridge.js"
 
 cat > "$HERMES_HOME/config.yaml" <<CONFEOF
 model:
