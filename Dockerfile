@@ -39,9 +39,11 @@ COPY whatsapp-creds.json /app/whatsapp-creds.json
 RUN cd /app/whatsapp-bridge && \
     npm install --legacy-peer-deps --no-audit --no-fund 2>&1 | tail -3 && \
     # Substitui o bridge padrão do pip pelo nosso (QR capture)
-    rm -rf /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge && \
+    rm -rf /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge || true && \
+    mkdir -p /usr/local/lib/python3.11/site-packages/hermes_agent/scripts && \
     ln -sf /app/whatsapp-bridge /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge && \
-    rm -rf /usr/local/lib/python3.11/site-packages/scripts/whatsapp-bridge && \
+    rm -rf /usr/local/lib/python3.11/site-packages/scripts/whatsapp-bridge || true && \
+    mkdir -p /usr/local/lib/python3.11/site-packages/scripts && \
     ln -sf /app/whatsapp-bridge /usr/local/lib/python3.11/site-packages/scripts/whatsapp-bridge
 
 # Token do Telegram via env var TELEGRAM_BOT_TOKEN (HF Space Secret)
