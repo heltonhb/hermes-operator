@@ -200,6 +200,9 @@ async function startSocket() {
 
   sock.ev.on('creds.update', () => { saveCreds(); lidToPhone = buildLidMap(); });
 
+  // When disconnected without creds, automatically request pairing code
+  let pairingRequested = false;
+
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
 
@@ -214,11 +217,27 @@ async function startSocket() {
       } catch(e) {
         // ignore write errors
       }
+
+      // Auto-request pairing code when QR is available (env WHATSAPP_PAIRING_PHONE)
+      const PAIRING_PHONE = process.env.WHATSAPP_PAIRING_PHONE || '';
+      if (PAIRING_PHONE && !pairingRequested) {
+        pairingRequested = true;
+        console.log(`🔑 Requesting pairing code for ${PAIRING_PHONE}...`);
+        sock.requestPairingCode(PAIRING_PHONE).then((code) => {
+          console.log(`🔑 Pairing code: ${code}`);
+          try { writeFileSync('/tmp/whatsapp-pairing-code.txt', code, 'utf-8'); } catch(e) {}
+          console.log('RAW_PAIRING_CODE:' + code);
+        }).catch((e) => {
+          console.log(`⚠️ Pairing code failed: ${e.message}`);
+          pairingRequested = false;
+        });
+      }
     }
 
     if (connection === 'close') {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
       connectionState = 'disconnected';
+      pairingRequested = false;
 
       if (reason === DisconnectReason.loggedOut) {
         console.log('❌ Logged out. Cleaning session and requesting new auth...');

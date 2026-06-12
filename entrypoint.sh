@@ -151,6 +151,7 @@ echo "[auth] API Server key pronta"
 # ── Start Gateway (without Telegram env var) ─────────────────
 # Aumenta timeout de conexão WhatsApp para evitar timeouts em cloud (HF Space)
 export HERMES_GATEWAY_PLATFORM_CONNECT_TIMEOUT=90
+export WHATSAPP_PAIRING_PHONE=5511971685906
 echo "=== Iniciando Hermes Gateway na porta ${API_SERVER_PORT} ==="
 hermes gateway run --verbose >> "$HERMES_HOME/logs/gateway.log" 2>&1 &
 GATEWAY_PID=$!

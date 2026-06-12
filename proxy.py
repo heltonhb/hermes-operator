@@ -110,6 +110,31 @@ document.getElementById("qrcode").classList.remove("loading");
     return web.Response(text=html_page, content_type="text/html; charset=utf-8")
 
 
+async def handle_whatsapp_pairing_code(request):
+    """Serve the WhatsApp pairing code if available."""
+    PAIRING_FILE = "/tmp/whatsapp-pairing-code.txt"
+    code = ""
+    if os.path.exists(PAIRING_FILE):
+        with open(PAIRING_FILE, "r") as f:
+            code = f.read().strip()
+    if code:
+        return web.json_response({"ok": True, "code": code, "phone": "5511971685906",
+            "instructions": "Abra WhatsApp → Menu (⋮) → Dispositivos conectados → Conectar dispositivo → Conectar com número de telefone. Digite o código acima."})
+    else:
+        # Check if already connected via bridge health
+        import subprocess
+        try:
+            r = subprocess.run(["curl", "-sf", "http://127.0.0.1:3000/health"], capture_output=True, text=True, timeout=5)
+            if r.returncode == 0:
+                import json as j
+                health = j.loads(r.stdout)
+                if health.get("status") == "connected":
+                    return web.json_response({"status": "connected"})
+        except:
+            pass
+        return web.json_response({"status": "no_code", "message": "Aguardando bridge gerar pairing code..."})
+
+
 async def handle_telegram_webhook(request):
     try:
         data = await request.json()
@@ -397,7 +422,7 @@ app.router.add_get('/telegram/gateway_logs', get_gateway_logs_handler)
 app.router.add_get('/telegram/pending', get_pending_handler)
 app.router.add_get('/whatsapp/qr', handle_whatsapp_qr)
 app.router.add_get('/whatsapp/status', lambda r: handle_whatsapp_qr(r))
-app.router.add_route('*', '/{tail:.*}', proxy_handler)
+app.router.add_get('/whatsapp/pairing-code', handle_whatsapp_pairing_code)
 
 # ── WhatsApp Bridge endpoints (proxied to internal bridge on :3000) ──
 BRIDGE_URL = "http://127.0.0.1:3000"
@@ -429,6 +454,8 @@ async def handle_whatsapp_pairing(request):
 
 app.router.add_post("/whatsapp/reset", handle_whatsapp_reset)
 app.router.add_post("/whatsapp/pairing", handle_whatsapp_pairing)
+
+app.router.add_route('*', '/{tail:.*}', proxy_handler)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", "7860"))
