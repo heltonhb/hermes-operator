@@ -37,7 +37,11 @@ RUN chmod +x /app/entrypoint.sh
 COPY whatsapp-bridge/ /app/whatsapp-bridge/
 COPY whatsapp-creds.json /app/whatsapp-creds.json
 RUN cd /app/whatsapp-bridge && \
-    npm install --legacy-peer-deps --no-audit --no-fund 2>&1 | tail -3
+    npm install --legacy-peer-deps --no-audit --no-fund 2>&1 | tail -3 && \
+    # Sobrescreve o bridge padrão do pacote pip com nossa versão patched (QR capture)
+    mkdir -p /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge && \
+    cp /app/whatsapp-bridge/bridge.js /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge/bridge.js && \
+    cp /app/whatsapp-bridge/package.json /usr/local/lib/python3.11/site-packages/hermes_agent/scripts/whatsapp-bridge/package.json
 
 # Token do Telegram via env var TELEGRAM_BOT_TOKEN (HF Space Secret)
 
