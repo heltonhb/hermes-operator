@@ -48,6 +48,15 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 HERMES_API_KEY = os.environ.get("HERMES_API_KEY", "")
 DEFAULT_MODEL = os.environ.get("HERMES_MODEL", "llama-3.3-70b-versatile")
 
+# ── Cloudflare Worker Relay (alternativa à bridge local) ──
+TELEGRAM_WORKER_URL = os.environ.get("TELEGRAM_WORKER_URL", "")
+TELEGRAM_WORKER_KEY = os.environ.get("TELEGRAM_WORKER_KEY", "")
+WORKER_ENABLED = bool(TELEGRAM_WORKER_URL and TELEGRAM_WORKER_KEY)
+if WORKER_ENABLED:
+    log.info(f"Telegram Worker relay configurado: {TELEGRAM_WORKER_URL}")
+else:
+    log.info("Telegram Worker NÃO configurado — usando bridge local (legado)")
+
 
 async def handle_telegram_webhook(request):
     try:
@@ -114,21 +123,76 @@ async def call_hermes_chat(chat_id, text, username):
             log.error(f"Error calling Hermes Gateway completions API: {e}")
     return None
 
+async def _send_via_worker(chat_id, text, parse_mode="Markdown"):
+    """POST mensagem ao Cloudflare Worker, que relay para Telegram API."""
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(
+                TELEGRAM_WORKER_URL,
+                headers={
+                    "Authorization": f"Bearer {TELEGRAM_WORKER_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "token": TELEGRAM_TOKEN,
+                    "chat_id": chat_id,
+                    "text": text,
+                    "parse_mode": parse_mode
+                },
+                timeout=30
+            ) as r:
+                if r.status != 200:
+                    err = await r.text()
+                    log.error(f"Worker relay error ({r.status}): {err[:200]}")
+                    return False
+                log.info(f"Sent via Worker to chat {chat_id}")
+                return True
+        except asyncio.TimeoutError:
+            log.error(f"Worker relay timeout for chat {chat_id}")
+        except Exception as e:
+            log.error(f"Worker relay failed for chat {chat_id}: {e}")
+    return False
+
 async def send_telegram_message(chat_id, text):
-    """Queue message for local bridge delivery (SSL to api.telegram.org blocked from HF Space)."""
-    # Telegram limit: 4096 characters per message
+    """Send message — via Worker (preferencial) ou fallback bridge local."""
     if len(text) > 4000:
         chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
     else:
         chunks = [text]
 
     for chunk in chunks:
-        _add_pending(chat_id, chunk)
+        if WORKER_ENABLED:
+            ok = await _send_via_worker(chat_id, chunk)
+            if not ok:
+                # Fallback: queue for local bridge
+                _add_pending(chat_id, chunk)
+                log.warning(f"Worker falhou, pendente na fila local para chat {chat_id}")
+        else:
+            _add_pending(chat_id, chunk)
         await asyncio.sleep(0.1)
 
 async def send_telegram_action(chat_id, action):
-    """Chat actions not supported from HF Space (SSL blocked). No-op."""
-    pass
+    """Send typing action via Worker relay (ou no-op se não configurado)."""
+    if not WORKER_ENABLED:
+        return
+    async with aiohttp.ClientSession() as session:
+        try:
+            await session.post(
+                TELEGRAM_WORKER_URL,
+                headers={
+                    "Authorization": f"Bearer {TELEGRAM_WORKER_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "token": TELEGRAM_TOKEN,
+                    "chat_id": chat_id,
+                    "action": "sendChatAction",
+                    "action_value": action
+                },
+                timeout=10
+            )
+        except Exception:
+            pass
 
 async def proxy_handler(request):
     path = request.path

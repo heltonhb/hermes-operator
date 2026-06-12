@@ -190,8 +190,8 @@ export HERMES_API_KEY="${API_SERVER_KEY}"
 echo "[proxy] Iniciando proxy webhook na porta ${PORT:-7860} (logs em $PROXY_LOG)..."
 proxy_with_restart() {
     while true; do
-        # Exporta o token SOMENTE para o proxy (Gateway não vê)
-        TELEGRAM_BOT_TOKEN="$TG_TOKEN" python3 /app/proxy.py 2>&1 | tee -a "$PROXY_LOG"
+        # Exporta o token + Worker SOMENTE para o proxy (Gateway não vê)
+        TELEGRAM_BOT_TOKEN="$TG_TOKEN" TELEGRAM_WORKER_URL="${TELEGRAM_WORKER_URL:-}" TELEGRAM_WORKER_KEY="${TELEGRAM_WORKER_KEY:-}" python3 /app/proxy.py 2>&1 | tee -a "$PROXY_LOG"
         local EC=${PIPESTATUS[0]}
         echo "[proxy] Proxy saiu (codigo ${EC}), reiniciando em 3s..."
         sleep 3
