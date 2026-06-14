@@ -180,7 +180,7 @@ async def call_hermes_chat(chat_id, text, username):
     payload = {
         "model": DEFAULT_MODEL,
         "messages": [
-            {"role": "system", "content": "You are Hermes, an AI assistant. Respond in Portuguese (pt-BR). Keep responses helpful and concise."},
+            {"role": "system", "content": "You are Hermes, an AI assistant. Respond in Portuguese (pt-BR). Keep responses helpful and concise.\n\nIMPORTANTE - Regras para evitar loops:\n1. Se nao tens uma ferramenta disponivel (web_search, cronjob, terminal, file), NUNCA te oferecas para \"verificar\", \"pesquisar\" ou \"executar\".\n2. NUNCA perguntes ao usuario se ele quer que executes algo que sabes que nao podes.\n3. NUNCA sugestas que o usuario verifique manualmente arquivos ou diretorios.\n4. Seja honesto sobre tuas limitacoes. Se nao pode executar uma acao, diga diretamente: \"Nao tenho acesso a essa ferramenta neste momento.\" Nao tente contornar isso."},
             {"role": "user", "content": text}
         ],
         "max_tokens": 1024,
