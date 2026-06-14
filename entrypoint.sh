@@ -38,19 +38,24 @@ else
     echo "[cron] Cron já está rodando"
 fi
 
-# Priority: groq > opencode > openrouter
-if [ -n "$GROQ_API_KEY" ]; then
-    HERMES_PROVIDER="${HERMES_PROVIDER:-groq}"
-    HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
-    echo "[groq] API key encontrada OK — usando ${HERMES_MODEL}"
-elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
-    HERMES_PROVIDER="${HERMES_PROVIDER:-opencode}"
-    HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash:free}"
-    echo "[opencode] API key encontrada OK — usando ${HERMES_MODEL}"
-elif [ -n "$OPENROUTER_API_KEY" ]; then
-    HERMES_PROVIDER="${HERMES_PROVIDER:-openrouter}"
-    HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash}"
-    echo "[openrouter] Usando deepseek/deepseek-v4-flash"
+# Priority: env var HERMES_PROVIDER > groq > opencode > openrouter
+# Se HERMES_PROVIDER já foi definido explicitamente (env var), respeita
+if [ -z "${HERMES_PROVIDER}" ]; then
+    if [ -n "$GROQ_API_KEY" ]; then
+        HERMES_PROVIDER="groq"
+        HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
+        echo "[groq] API key encontrada OK — usando ${HERMES_MODEL}"
+    elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
+        HERMES_PROVIDER="opencode"
+        HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash:free}"
+        echo "[opencode] API key encontrada OK — usando ${HERMES_MODEL}"
+    elif [ -n "$OPENROUTER_API_KEY" ]; then
+        HERMES_PROVIDER="openrouter"
+        HERMES_MODEL="${HERMES_MODEL:-meta-llama/llama-3.3-70b-instruct:free}"
+        echo "[openrouter] Usando ${HERMES_MODEL}"
+    fi
+else
+    echo "[provider] Usando HERMES_PROVIDER=${HERMES_PROVIDER} com modelo ${HERMES_MODEL:-default}"
 fi
 
 export HERMES_MODEL HERMES_PROVIDER
@@ -113,6 +118,9 @@ providers:
     - deepseek/deepseek-v4-flash
     - deepseek/deepseek-v4-pro
     - anthropic/claude-sonnet-4
+    - meta-llama/llama-3.3-70b-instruct:free
+    - qwen/qwen3-coder:free
+    - nousresearch/hermes-3-llama-3.1-405b:free
     api_mode: chat_completions
 
 gateway:
@@ -134,6 +142,11 @@ web:
 platform_toolsets:
   api_server:
     - web
+    - cronjob
+    - terminal
+    - file
+    - search
+    - session_search
 CONFEOF
 cp "$HERMES_HOME/config.yaml" /app/config.yaml
 
