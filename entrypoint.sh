@@ -215,6 +215,14 @@ export HERMES_API_URL="http://127.0.0.1:7861"
 export HERMES_API_KEY="${API_SERVER_KEY}"
 
 echo "[proxy] Iniciando proxy webhook na porta ${PORT:-7860} (logs em $PROXY_LOG)..."
+
+# Patch proxy.py system prompt with anti-loop instructions
+if [ -f /app/patch_proxy.py ]; then
+    python3 /app/patch_proxy.py
+else
+    echo "[prompt] WARN: patch_proxy.py not found"
+fi
+
 proxy_with_restart() {
     while true; do
         # Exporta o token + Worker SOMENTE para o proxy (Gateway não vê)
