@@ -38,17 +38,17 @@ else
     echo "[cron] Cron já está rodando"
 fi
 
-# Priority: env var HERMES_PROVIDER > openrouter (free models) > groq > opencode
-# Se HERMES_PROVIDER já foi definido explicitamente (env var), respeita
+# Priority: env var HERMES_PROVIDER > groq > openrouter > opencode
+# Groq é o provedor mais estável para free. OpenRouter quando disponível.
 if [ -z "${HERMES_PROVIDER}" ]; then
-    if [ -n "$OPENROUTER_API_KEY" ]; then
-        HERMES_PROVIDER="openrouter"
-        HERMES_MODEL="${HERMES_MODEL:-meta-llama/llama-3.3-70b-instruct:free}"
-        echo "[openrouter] API key encontrada — usando ${HERMES_MODEL}"
-    elif [ -n "$GROQ_API_KEY" ]; then
+    if [ -n "$GROQ_API_KEY" ]; then
         HERMES_PROVIDER="groq"
         HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
         echo "[groq] API key encontrada OK — usando ${HERMES_MODEL}"
+    elif [ -n "$OPENROUTER_API_KEY" ]; then
+        HERMES_PROVIDER="openrouter"
+        HERMES_MODEL="${HERMES_MODEL:-meta-llama/llama-3.3-70b-instruct:free}"
+        echo "[openrouter] API key encontrada — usando ${HERMES_MODEL}"
     elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
         HERMES_PROVIDER="opencode"
         HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash:free}"
