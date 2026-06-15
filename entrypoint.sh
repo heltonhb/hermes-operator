@@ -38,21 +38,20 @@ else
     echo "[cron] Cron já está rodando"
 fi
 
-# Priority: env var HERMES_PROVIDER > groq > openrouter > opencode
-# Groq é o provedor mais estável para free. OpenRouter quando disponível.
+# Priority: openrouter > opencode > groq (to avoid Groq rate limits)
 if [ -z "${HERMES_PROVIDER}" ]; then
-    if [ -n "$GROQ_API_KEY" ]; then
-        HERMES_PROVIDER="groq"
-        HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
-        echo "[groq] API key encontrada OK — usando ${HERMES_MODEL}"
-    elif [ -n "$OPENROUTER_API_KEY" ]; then
-        HERMES_PROVIDER="openrouter"
-        HERMES_MODEL="${HERMES_MODEL:-meta-llama/llama-3.3-70b-instruct:free}"
-        echo "[openrouter] API key encontrada — usando ${HERMES_MODEL}"
+    if [ -n "$OPENROUTER_API_KEY" ]; then
+        HERMES_PROVIDER="${HERMES_PROVIDER:-openrouter}"
+        HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-chat}"
+        echo "[openrouter] API key encontrada OK — usando ${HERMES_MODEL}"
     elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
-        HERMES_PROVIDER="opencode"
+        HERMES_PROVIDER="${HERMES_PROVIDER:-opencode}"
         HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash:free}"
         echo "[opencode] API key encontrada OK — usando ${HERMES_MODEL}"
+    elif [ -n "$GROQ_API_KEY" ]; then
+        HERMES_PROVIDER="${HERMES_PROVIDER:-groq}"
+        HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
+        echo "[groq] API key encontrada OK — usando ${HERMES_MODEL}"
     fi
 else
     echo "[provider] Usando HERMES_PROVIDER=${HERMES_PROVIDER} com modelo ${HERMES_MODEL:-default}"
