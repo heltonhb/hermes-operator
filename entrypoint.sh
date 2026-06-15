@@ -41,15 +41,15 @@ fi
 # Priority: openrouter > opencode > groq (to avoid Groq rate limits)
 if [ -z "${HERMES_PROVIDER}" ]; then
     if [ -n "$OPENROUTER_API_KEY" ]; then
-        HERMES_PROVIDER="${HERMES_PROVIDER:-openrouter}"
-        HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-chat}"
+        HERMES_PROVIDER="openrouter"
+        HERMES_MODEL="${HERMES_MODEL:-meta-llama/llama-3.3-70b-instruct:free}"
         echo "[openrouter] API key encontrada OK — usando ${HERMES_MODEL}"
     elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
-        HERMES_PROVIDER="${HERMES_PROVIDER:-opencode}"
-        HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash:free}"
+        HERMES_PROVIDER="opencode"
+        HERMES_MODEL="${HERMES_MODEL:-deepseek-v4-flash}"
         echo "[opencode] API key encontrada OK — usando ${HERMES_MODEL}"
     elif [ -n "$GROQ_API_KEY" ]; then
-        HERMES_PROVIDER="${HERMES_PROVIDER:-groq}"
+        HERMES_PROVIDER="groq"
         HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
         echo "[groq] API key encontrada OK — usando ${HERMES_MODEL}"
     fi
@@ -110,7 +110,7 @@ providers:
     name: OpenRouter
     key_env: OPENROUTER_API_KEY
     api: https://openrouter.ai/api/v1
-    default_model: deepseek/deepseek-chat
+    default_model: meta-llama/llama-3.3-70b-instruct:free
     models:
     - deepseek/deepseek-chat
     - deepseek/deepseek-r1
@@ -120,6 +120,15 @@ providers:
     - meta-llama/llama-3.3-70b-instruct:free
     - qwen/qwen3-coder:free
     - nousresearch/hermes-3-llama-3.1-405b:free
+    api_mode: chat_completions
+  opencode:
+    name: OpenCode Zen
+    key_env: OPENCODE_ZEN_API_KEY
+    api: https://opencode.ai/zen/go/v1
+    default_model: deepseek-v4-flash
+    models:
+    - deepseek-v4-flash
+    - deepseek-v4-pro
     api_mode: chat_completions
 
 gateway:
