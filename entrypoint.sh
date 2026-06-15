@@ -154,7 +154,6 @@ web:
 platform_toolsets:
   api_server:
     - web
-    - cronjob
     - terminal
     - file
     - search
