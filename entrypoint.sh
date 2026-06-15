@@ -42,7 +42,7 @@ fi
 if [ -z "${HERMES_PROVIDER}" ]; then
     if [ -n "$OPENROUTER_API_KEY" ]; then
         HERMES_PROVIDER="openrouter"
-        HERMES_MODEL="${HERMES_MODEL:-meta-llama/llama-3.3-70b-instruct:free}"
+        HERMES_MODEL="${HERMES_MODEL:-nousresearch/hermes-3-llama-3.1-405b:free}"
         echo "[openrouter] API key encontrada OK — usando ${HERMES_MODEL}"
     elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
         HERMES_PROVIDER="opencode"
@@ -110,8 +110,9 @@ providers:
     name: OpenRouter
     key_env: OPENROUTER_API_KEY
     api: https://openrouter.ai/api/v1
-    default_model: meta-llama/llama-3.3-70b-instruct:free
+    default_model: nousresearch/hermes-3-llama-3.1-405b:free
     models:
+    - nousresearch/hermes-3-llama-3.1-405b:free
     - meta-llama/llama-3.3-70b-instruct:free
     - openrouter/free
     - deepseek/deepseek-chat

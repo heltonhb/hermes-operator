@@ -4,7 +4,7 @@
 # Fallback: groq (llama-3.3-70b-versatile)
 # Pode ser sobrescrito via env vars HERMES_MODEL / HERMES_PROVIDER
 model:
-  default: meta-llama/llama-3.3-70b-instruct:free
+  default: nousresearch/hermes-3-llama-3.1-405b:free
   provider: openrouter
 
 # ── Providers ─────────────────────────────────────────────────
@@ -32,9 +32,9 @@ providers:
     name: OpenRouter
     key_env: OPENROUTER_API_KEY
     api: https://openrouter.ai/api/v1
-    default_model: meta-llama/llama-3.3-70b-instruct:free
+    default_model: nousresearch/hermes-3-llama-3.1-405b:free
     models:
-    - meta-llama/llama-3.3-70b-instruct:free
+    - nousresearch/hermes-3-llama-3.1-405b:free
     - deepseek/deepseek-chat
     - deepseek/deepseek-r1
     - anthropic/claude-sonnet-4
