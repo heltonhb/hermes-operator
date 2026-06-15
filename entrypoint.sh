@@ -42,7 +42,7 @@ fi
 if [ -z "${HERMES_PROVIDER}" ]; then
     if [ -n "$OPENROUTER_API_KEY" ]; then
         HERMES_PROVIDER="openrouter"
-        HERMES_MODEL="${HERMES_MODEL:-google/gemini-2.5-flash:free}"
+        HERMES_MODEL="${HERMES_MODEL:-openrouter/free}"
         echo "[openrouter] API key encontrada OK — usando ${HERMES_MODEL}"
     elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
         HERMES_PROVIDER="opencode"
@@ -110,8 +110,9 @@ providers:
     name: OpenRouter
     key_env: OPENROUTER_API_KEY
     api: https://openrouter.ai/api/v1
-    default_model: google/gemini-2.5-flash:free
+    default_model: openrouter/free
     models:
+    - openrouter/free
     - deepseek/deepseek-chat
     - deepseek/deepseek-r1
     - deepseek/deepseek-v4-flash
