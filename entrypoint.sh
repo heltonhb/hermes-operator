@@ -38,16 +38,16 @@ else
     echo "[cron] Cron já está rodando"
 fi
 
-# Priority: openrouter > opencode > groq (to avoid Groq rate limits)
+# Priority: opencode > openrouter > groq (to avoid rate limits and credit errors)
 if [ -z "${HERMES_PROVIDER}" ]; then
-    if [ -n "$OPENROUTER_API_KEY" ]; then
-        HERMES_PROVIDER="openrouter"
-        HERMES_MODEL="${HERMES_MODEL:-meta-llama/llama-3.3-70b-instruct:free}"
-        echo "[openrouter] API key encontrada OK — usando ${HERMES_MODEL}"
-    elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
+    if [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
         HERMES_PROVIDER="opencode"
         HERMES_MODEL="${HERMES_MODEL:-deepseek-v4-flash}"
         echo "[opencode] API key encontrada OK — usando ${HERMES_MODEL}"
+    elif [ -n "$OPENROUTER_API_KEY" ]; then
+        HERMES_PROVIDER="openrouter"
+        HERMES_MODEL="${HERMES_MODEL:-google/gemini-2.5-flash:free}"
+        echo "[openrouter] API key encontrada OK — usando ${HERMES_MODEL}"
     elif [ -n "$GROQ_API_KEY" ]; then
         HERMES_PROVIDER="groq"
         HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
@@ -110,7 +110,7 @@ providers:
     name: OpenRouter
     key_env: OPENROUTER_API_KEY
     api: https://openrouter.ai/api/v1
-    default_model: meta-llama/llama-3.3-70b-instruct:free
+    default_model: google/gemini-2.5-flash:free
     models:
     - deepseek/deepseek-chat
     - deepseek/deepseek-r1
@@ -120,6 +120,7 @@ providers:
     - meta-llama/llama-3.3-70b-instruct:free
     - qwen/qwen3-coder:free
     - nousresearch/hermes-3-llama-3.1-405b:free
+    - google/gemini-2.5-flash:free
     api_mode: chat_completions
   opencode:
     name: OpenCode Zen
