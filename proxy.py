@@ -222,6 +222,10 @@ async def _send_via_worker(chat_id, text, parse_mode="Markdown"):
                 if r.status != 200:
                     err = await r.text()
                     log.warning(f"Worker relay error ({r.status}): {err[:200]}")
+                    
+                    if "blocked" in err or "Forbidden" in err or "chat not found" in err:
+                        return "blocked"
+                    
                     # If it's a parse error (invalid markdown), retry without parse_mode
                     if r.status == 400 and "parse entities" in err:
                         log.info("Retrying without parse_mode (plain text)")
@@ -236,6 +240,8 @@ async def _send_via_worker(chat_id, text, parse_mode="Markdown"):
                                 return True
                             err2 = await r2.text()
                             log.error(f"Worker relay error even without parse_mode ({r2.status}): {err2[:200]}")
+                            if "blocked" in err2 or "Forbidden" in err2 or "chat not found" in err2:
+                                return "blocked"
                     return False
                 log.info(f"Sent via Worker to chat {chat_id}")
                 return True
@@ -245,22 +251,80 @@ async def _send_via_worker(chat_id, text, parse_mode="Markdown"):
             log.error(f"Worker relay failed for chat {chat_id}: {e}")
     return False
 
+async def _send_direct(chat_id, text, parse_mode="Markdown"):
+    """POST message directly to Telegram Bot API from the Space."""
+    if not TELEGRAM_TOKEN:
+        log.warning("Direct send: No TELEGRAM_BOT_TOKEN configured")
+        return False
+    
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": parse_mode,
+        "disable_web_page_preview": True
+    }
+    
+    log.info(f"Direct send: chat_id={chat_id} text_len={len(text)}")
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(url, json=payload, timeout=20) as r:
+                if r.status == 200:
+                    log.info(f"Sent directly to chat {chat_id}")
+                    return True
+                
+                err = await r.text()
+                log.warning(f"Direct send error ({r.status}): {err[:200]}")
+                
+                if r.status == 403 or "blocked" in err or "Forbidden" in err or "chat not found" in err:
+                    return "blocked"
+                
+                # If it's a parse error (invalid markdown), retry without parse_mode
+                if r.status == 400 and "parse entities" in err:
+                    log.info("Retrying direct send without parse_mode (plain text)")
+                    payload_retry = payload.copy()
+                    if "parse_mode" in payload_retry:
+                        del payload_retry["parse_mode"]
+                    async with session.post(url, json=payload_retry, timeout=20) as r2:
+                        if r2.status == 200:
+                            log.info(f"Sent directly (plain text) to chat {chat_id}")
+                            return True
+                        err2 = await r2.text()
+                        log.error(f"Direct send error even without parse_mode ({r2.status}): {err2[:200]}")
+                        if r2.status == 403 or "blocked" in err2 or "Forbidden" in err2 or "chat not found" in err2:
+                            return "blocked"
+                return False
+        except Exception as e:
+            log.error(f"Direct send failed for chat {chat_id}: {e}")
+    return False
+
 async def send_telegram_message(chat_id, text):
-    """Send message — via Worker (preferencial) ou fallback bridge local."""
+    """Send message — via Worker (preferencial), direct fallback, or local bridge queue."""
     if len(text) > 4000:
         chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
     else:
         chunks = [text]
 
     for chunk in chunks:
+        status = False
         if WORKER_ENABLED:
-            ok = await _send_via_worker(chat_id, chunk)
-            if not ok:
-                # Fallback: queue for local bridge
-                _add_pending(chat_id, chunk)
-                log.warning(f"Worker falhou, pendente na fila local para chat {chat_id}")
+            status = await _send_via_worker(chat_id, chunk)
+            if status is False:
+                log.warning(f"Worker failed, trying direct delivery as fallback...")
+                status = await _send_direct(chat_id, chunk)
         else:
+            status = await _send_direct(chat_id, chunk)
+
+        if status is True:
+            # Sent successfully
+            pass
+        elif status == "blocked":
+            log.error(f"Failed to send: Bot was blocked by user {chat_id}. Dropping message.")
+        else:
+            # Only queue for local bridge if both worker and direct sending failed due to network/timeout
             _add_pending(chat_id, chunk)
+            log.warning(f"All send methods failed, queued in pending for local bridge fallback.")
+        
         await asyncio.sleep(0.1)
 
 async def send_telegram_action(chat_id, action):
