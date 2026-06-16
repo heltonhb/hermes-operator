@@ -154,8 +154,6 @@ web:
 platform_toolsets:
   api_server:
     - web
-    - terminal
-    - file
     - search
     - session_search
 CONFEOF
