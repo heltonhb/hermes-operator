@@ -476,6 +476,21 @@ async def cleanup_background_tasks(app):
     except asyncio.CancelledError:
         pass
 
+async def handle_key_info(request):
+    key = os.environ.get("OPENROUTER_API_KEY", "")
+    if not key:
+        return web.json_response({"error": "OPENROUTER_API_KEY not configured"}, status=404)
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(
+                "https://openrouter.ai/api/v1/auth/key",
+                headers={"Authorization": f"Bearer {key}"}
+            ) as r:
+                body = await r.json()
+                return web.json_response(body, status=r.status)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
 app = web.Application()
 app.on_startup.append(start_background_tasks)
 app.on_cleanup.append(cleanup_background_tasks)
@@ -484,6 +499,7 @@ app.router.add_post('/telegram/webhook', handle_telegram_webhook)
 app.router.add_get('/telegram/logs', get_logs_handler)
 app.router.add_get('/telegram/gateway_logs', get_gateway_logs_handler)
 app.router.add_get('/telegram/pending', get_pending_handler)
+app.router.add_get('/telegram/key_info', handle_key_info)
 app.router.add_get('/whatsapp/qr', handle_whatsapp_qr)
 app.router.add_get('/whatsapp/status', lambda r: handle_whatsapp_qr(r))
 app.router.add_get('/whatsapp/pairing-code', handle_whatsapp_pairing_code)
