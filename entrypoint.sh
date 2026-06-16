@@ -38,20 +38,20 @@ else
     echo "[cron] Cron já está rodando"
 fi
 
-# Priority: openrouter (free model) > opencode > groq (to avoid rate limits and credit errors)
+# Priority: openrouter (free model) > groq > opencode
 if [ -z "${HERMES_PROVIDER}" ]; then
     if [ -n "$OPENROUTER_API_KEY" ]; then
         HERMES_PROVIDER="openrouter"
         HERMES_MODEL="${HERMES_MODEL:-google/gemini-2.5-flash:free}"
         echo "[openrouter] API key encontrada OK — usando ${HERMES_MODEL}"
-    elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
-        HERMES_PROVIDER="opencode"
-        HERMES_MODEL="${HERMES_MODEL:-deepseek-v4-flash}"
-        echo "[opencode] API key encontrada OK — usando ${HERMES_MODEL}"
     elif [ -n "$GROQ_API_KEY" ]; then
         HERMES_PROVIDER="groq"
         HERMES_MODEL="${HERMES_MODEL:-llama-3.3-70b-versatile}"
         echo "[groq] API key encontrada OK — usando ${HERMES_MODEL}"
+    elif [ -n "$OPENCODE_ZEN_API_KEY" ] || [ -n "$OPENCODE_API_KEY" ]; then
+        HERMES_PROVIDER="opencode"
+        HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-v4-flash:free}"
+        echo "[opencode] API key encontrada OK — usando ${HERMES_MODEL}"
     fi
 else
     echo "[provider] Usando HERMES_PROVIDER=${HERMES_PROVIDER} com modelo ${HERMES_MODEL:-default}"
@@ -112,20 +112,15 @@ providers:
     api: https://openrouter.ai/api/v1
     default_model: google/gemini-2.5-flash:free
     models:
+    - google/gemini-2.5-flash:free
+    - google/gemini-2.0-flash-exp:free
     - google/gemma-4-31b-it:free
-    - qwen/qwen3-coder:free
-    - nousresearch/hermes-3-llama-3.1-405b:free
-    - meta-llama/llama-3.3-70b-instruct:free
-    - openrouter/free
     - deepseek/deepseek-chat
     - deepseek/deepseek-r1
-    - deepseek/deepseek-v4-flash
-    - deepseek/deepseek-v4-pro
     - anthropic/claude-sonnet-4
     - meta-llama/llama-3.3-70b-instruct:free
     - qwen/qwen3-coder:free
     - nousresearch/hermes-3-llama-3.1-405b:free
-    - google/gemini-2.5-flash:free
     api_mode: chat_completions
   opencode:
     name: OpenCode Zen
