@@ -155,7 +155,6 @@ platform_toolsets:
   api_server:
     - web
     - search
-    - session_search
 CONFEOF
 cp "$HERMES_HOME/config.yaml" /app/config.yaml
 

@@ -80,4 +80,3 @@ platform_toolsets:
   api_server:
     - web
     - search
-    - session_search
