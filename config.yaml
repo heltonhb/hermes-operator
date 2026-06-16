@@ -4,7 +4,7 @@
 # Fallback: groq (llama-3.3-70b-versatile)
 # Pode ser sobrescrito via env vars HERMES_MODEL / HERMES_PROVIDER
 model:
-  default: google/gemma-4-31b-it:free
+  default: google/gemini-2.5-flash:free
   provider: openrouter
 
 # ── Providers ─────────────────────────────────────────────────
@@ -32,7 +32,7 @@ providers:
     name: OpenRouter
     key_env: OPENROUTER_API_KEY
     api: https://openrouter.ai/api/v1
-    default_model: google/gemma-4-31b-it:free
+    default_model: google/gemini-2.5-flash:free
     models:
     - google/gemma-4-31b-it:free
     - deepseek/deepseek-chat

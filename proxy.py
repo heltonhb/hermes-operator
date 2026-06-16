@@ -46,7 +46,7 @@ def _add_pending(chat_id, text):
 GATEWAY_URL = "http://127.0.0.1:7861"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 HERMES_API_KEY = os.environ.get("HERMES_API_KEY", "")
-DEFAULT_MODEL = os.environ.get("HERMES_MODEL", "llama-3.3-70b-versatile")
+DEFAULT_MODEL = os.environ.get("HERMES_MODEL", "google/gemini-2.5-flash:free")
 
 # ── Cloudflare Worker Relay (alternativa à bridge local) ──
 TELEGRAM_WORKER_URL = os.environ.get("TELEGRAM_WORKER_URL", "")

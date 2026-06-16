@@ -21,7 +21,7 @@ ENV PIP_DEFAULT_TIMEOUT=120
 
 # Instala apenas os extras necessários (não [all] — reduz drasticamente o build)
 # messaging = Telegram/WhatsApp | web = DuckDuckGo search | cron = cron jobs
-RUN pip install --no-cache-dir "hermes-agent[messaging,web,cron]" duckduckgo_search
+RUN pip install --no-cache-dir "hermes-agent[messaging,web,cron]" ddgs duckduckgo_search
 
 # Cria diretório do Hermes
 ENV HERMES_HOME=/root/.hermes
