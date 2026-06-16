@@ -491,6 +491,60 @@ async def handle_key_info(request):
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
 
+async def handle_openrouter_completions(request):
+    try:
+        headers = {k: v for k, v in request.headers.items() if k.lower() != 'host'}
+        data = await request.json()
+        log.info(f"Intercepted OpenRouter completions request for model: {data.get('model')}")
+
+        # Inject provider ignore list to exclude Venice provider which is rate-limiting free requests
+        if "provider" not in data:
+            data["provider"] = {}
+        ignore_list = data["provider"].get("ignore", [])
+        if "Venice" not in ignore_list:
+            ignore_list.append("Venice")
+        data["provider"]["ignore"] = ignore_list
+        data["provider"]["allow_fallbacks"] = True
+
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=data, timeout=120) as r:
+                body = await r.read()
+                log.info(f"OpenRouter completions response status: {r.status}")
+                return web.Response(
+                    body=body,
+                    status=r.status,
+                    headers={k: v for k, v in r.headers.items() if k.lower() not in ('content-encoding', 'transfer-encoding')}
+                )
+    except Exception as e:
+        log.error(f"Error in OpenRouter completions proxy: {e}")
+        return web.Response(text=f"Proxy error: {e}", status=502)
+
+async def openrouter_proxy_handler(request):
+    tail = request.match_info.get('tail', '')
+    if tail == 'chat/completions':
+        return await handle_openrouter_completions(request)
+
+    url = f"https://openrouter.ai/api/v1/{tail}"
+    if request.query_string:
+        url += f"?{request.query_string}"
+
+    headers = {k: v for k, v in request.headers.items() if k.lower() != 'host'}
+    data = await request.read()
+
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.request(request.method, url, headers=headers, data=data, timeout=120) as r:
+                body = await r.read()
+                return web.Response(
+                    body=body,
+                    status=r.status,
+                    headers={k: v for k, v in r.headers.items() if k.lower() not in ('content-encoding', 'transfer-encoding')}
+                )
+        except Exception as e:
+            log.error(f"OpenRouter proxy error for {tail}: {e}")
+            return web.Response(text="Gateway Error", status=502)
+
 app = web.Application()
 app.on_startup.append(start_background_tasks)
 app.on_cleanup.append(cleanup_background_tasks)
@@ -535,6 +589,7 @@ async def handle_whatsapp_pairing(request):
 app.router.add_post("/whatsapp/reset", handle_whatsapp_reset)
 app.router.add_post("/whatsapp/pairing", handle_whatsapp_pairing)
 
+app.router.add_route('*', '/openrouter/v1/{tail:.*}', openrouter_proxy_handler)
 app.router.add_route('*', '/{tail:.*}', proxy_handler)
 
 if __name__ == '__main__':

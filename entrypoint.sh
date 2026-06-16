@@ -109,7 +109,7 @@ providers:
   openrouter:
     name: OpenRouter
     key_env: OPENROUTER_API_KEY
-    api: https://openrouter.ai/api/v1
+    api: http://127.0.0.1:${PORT:-7860}/openrouter/v1
     default_model: meta-llama/llama-3.3-70b-instruct:free
     models:
     - meta-llama/llama-3.3-70b-instruct:free
