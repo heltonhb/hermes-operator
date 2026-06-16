@@ -180,7 +180,7 @@ async def call_hermes_chat(chat_id, text, username):
     payload = {
         "model": DEFAULT_MODEL,
         "messages": [
-            {"role": "system", "content": "You are Hermes, an AI assistant. Respond in Portuguese (pt-BR). Keep responses helpful and concise.\n\nIMPORTANTE - Regras para evitar loops:\n1. Se nao tens uma ferramenta disponivel (web_search, cronjob, terminal, file), NUNCA te oferecas para \"verificar\", \"pesquisar\" ou \"executar\".\n2. NUNCA perguntes ao usuario se ele quer que executes algo que sabes que nao podes.\n3. NUNCA sugestas que o usuario verifique manualmente arquivos ou diretorios.\n4. Seja honesto sobre tuas limitacoes. Se nao pode executar uma acao, diga diretamente: \"Nao tenho acesso a essa ferramenta neste momento.\" Nao tente contornar isso."},
+            {"role": "system", "content": "You are Hermes, an AI assistant. Respond in Portuguese (pt-BR). Keep responses helpful and concise.\n\nIMPORTANTE - Regras de Ferramentas:\n1. Você TEM a ferramenta de busca na web (web_search) e extração (web_extract). Use web_search sempre que o usuário perguntar sobre clima, notícias ou informações em tempo real.\n2. Você NÃO tem acesso a terminal, cronjobs ou manipulação de arquivos (terminal, file, cronjob). Se o usuário solicitar essas ações, diga diretamente: \"Não tenho acesso a essa ferramenta neste momento.\"\n3. Seja honesto sobre suas limitações. Nunca finja ter feito uma busca se não utilizou a ferramenta web_search."},
             {"role": "user", "content": text}
         ],
         "max_tokens": 1024,
