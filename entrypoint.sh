@@ -148,7 +148,9 @@ display:
   language: pt
   show_cost: false
 web:
-  backend: ddgs
+  backend: firecrawl
+  search_backend: firecrawl
+  extract_backend: firecrawl
 platform_toolsets:
   api_server:
     - web
